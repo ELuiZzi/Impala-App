@@ -51,7 +51,9 @@ export function updatePrefs(patch: Partial<Prefs>) {
 export const MIN_SPEED = 0.5;
 export const MAX_SPEED = 2;
 export const MAX_SEMITONES = 12;
-const NEUTRAL: PlaybackTuning = { speed: 1, semitones: 0, vinyl: false, reverb: false };
+const NEUTRAL: PlaybackTuning = { speed: 1, semitones: 0, vinyl: false, reverb: 0 };
+/** Lo que reciben los ajustes viejos con la reverb encendida (antes era un sí/no). */
+const DEFAULT_REVERB = 40;
 
 const clamp = (v: number, min: number, max: number) => Math.min(max, Math.max(min, v));
 
@@ -60,7 +62,7 @@ export function clampTuning(t: PlaybackTuning): PlaybackTuning {
     speed: clamp(Number(t.speed) || 1, MIN_SPEED, MAX_SPEED),
     semitones: clamp(Number(t.semitones) || 0, -MAX_SEMITONES, MAX_SEMITONES),
     vinyl: !!t.vinyl,
-    reverb: !!t.reverb,
+    reverb: typeof t.reverb === 'boolean' ? (t.reverb ? DEFAULT_REVERB : 0) : clamp(Math.round(Number(t.reverb) || 0), 0, 100),
   };
 }
 

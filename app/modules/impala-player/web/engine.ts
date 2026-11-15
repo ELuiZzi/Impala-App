@@ -72,7 +72,7 @@ export function applyTuning(deck: Deck) {
   deck.audio.defaultPlaybackRate = t.speed;
   deck.audio.playbackRate = t.speed;
   deck.chain?.setPitchRatio(Math.pow(2, t.semitones / 12));
-  deck.chain?.setReverb(t.reverb);
+  deck.chain?.setReverb(t.reverb / 100);
 }
 
 export function applyTuningToAll() {

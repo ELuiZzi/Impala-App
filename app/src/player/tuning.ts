@@ -12,40 +12,46 @@ export const SPEED_MIN = 0.75;
 export const SPEED_MAX = 1.35;
 export const SPEED_STEP = 0.05;
 export const SEMITONES_MAX = 6;
+/** Reverberación en %: 0 = apagada. */
+export const REVERB_MAX = 100;
+export const REVERB_STEP = 10;
+/** La de «Slowed + reverb»: presente pero sin tapar la canción. */
+export const REVERB_DEFAULT = 40;
 
-export type TuningPreset = { id: 'normal' | 'spedup' | 'slowed' | 'slowedreverb'; label: string; speed: number; reverb: boolean };
+export type TuningPreset = { id: 'normal' | 'spedup' | 'slowed' | 'slowedreverb'; label: string; speed: number; reverb: number };
 
 export const TUNING_PRESETS: TuningPreset[] = [
-  { id: 'normal', label: 'Normal', speed: 1, reverb: false },
-  { id: 'spedup', label: 'Sped up', speed: 1.25, reverb: false },
-  { id: 'slowed', label: 'Slowed', speed: 0.85, reverb: false },
-  { id: 'slowedreverb', label: 'Slowed + reverb', speed: 0.85, reverb: true },
+  { id: 'normal', label: 'Normal', speed: 1, reverb: 0 },
+  { id: 'spedup', label: 'Sped up', speed: 1.25, reverb: 0 },
+  { id: 'slowed', label: 'Slowed', speed: 0.85, reverb: 0 },
+  { id: 'slowedreverb', label: 'Slowed + reverb', speed: 0.85, reverb: REVERB_DEFAULT },
 ];
 
-export const NORMAL: PlaybackTuning = { speed: 1, semitones: 0, vinyl: false, reverb: false };
+export const NORMAL: PlaybackTuning = { speed: 1, semitones: 0, vinyl: false, reverb: 0 };
 
 const near = (a: number, b: number) => Math.abs(a - b) < 0.001;
 
-export const isNormal = (t: PlaybackTuning) => near(t.speed, 1) && near(t.semitones, 0) && !t.reverb;
+export const isNormal = (t: PlaybackTuning) => near(t.speed, 1) && near(t.semitones, 0) && t.reverb <= 0;
 
 /** El preajuste que coincide (el modo de tono, natural o vinilo, no cuenta); null = personalizado. */
 export function presetOf(t: PlaybackTuning): TuningPreset | null {
   if (isNormal(t)) return TUNING_PRESETS[0];
   if (!near(t.semitones, 0)) return null;
-  return TUNING_PRESETS.find((p) => p.id !== 'normal' && near(p.speed, t.speed) && p.reverb === t.reverb) ?? null;
+  return TUNING_PRESETS.find((p) => p.id !== 'normal' && near(p.speed, t.speed) && near(p.reverb, t.reverb)) ?? null;
 }
 
 const formatSpeed = (speed: number) => `${String(Math.round(speed * 100) / 100).replace('.', ',')}×`;
 const formatSemitones = (st: number) => `${st > 0 ? '+' : st < 0 ? '−' : '±'}${Math.abs(Math.round(st))} st`;
-export { formatSemitones, formatSpeed };
+const formatReverb = (r: number) => (r <= 0 ? 'Apagada' : `${Math.round(r)} %`);
+export { formatReverb, formatSemitones, formatSpeed };
 
-/** "Normal", "Sped up 1,25×", "Personalizado 1,1× · +2 st"… para el menú y el indicador. */
+/** "Normal", "Sped up 1,25×", "Personalizado 1,1× · +2 st · reverb 60 %"… para el menú y el indicador. */
 export function tuningLabel(t: PlaybackTuning): string {
   if (isNormal(t)) return 'Normal';
   const preset = presetOf(t);
   const speed = formatSpeed(t.speed);
-  if (preset) return `${preset.label} ${speed}`;
-  return ['Personalizado', near(t.speed, 1) ? null : speed, near(t.semitones, 0) ? null : formatSemitones(t.semitones), t.reverb ? 'reverb' : null]
+  if (preset) return `${preset.label} ${speed}${preset.reverb > 0 ? ` · ${formatReverb(preset.reverb)}` : ''}`;
+  return ['Personalizado', near(t.speed, 1) ? null : speed, near(t.semitones, 0) ? null : formatSemitones(t.semitones), t.reverb > 0 ? `reverb ${formatReverb(t.reverb)}` : null]
     .filter(Boolean)
     .join(' · ')
     .replace('Personalizado · ', 'Personalizado ');
@@ -86,11 +92,12 @@ export function useTuning(songId: string | null) {
 export function setTuning(songId: string, t: PlaybackTuning, perSong: boolean) {
   const speed = Math.min(SPEED_MAX, Math.max(SPEED_MIN, Math.round(t.speed * 100) / 100));
   const semitones = Math.min(SEMITONES_MAX, Math.max(-SEMITONES_MAX, Math.round(t.semitones)));
+  const reverb = Math.min(REVERB_MAX, Math.max(0, Math.round(t.reverb)));
   if (perSong) {
-    ImpalaPlayer.setPlaybackTuning(songId, speed, semitones, t.vinyl, t.reverb);
+    ImpalaPlayer.setPlaybackTuning(songId, speed, semitones, t.vinyl, reverb);
   } else {
     ImpalaPlayer.clearSongTuning(songId);
-    ImpalaPlayer.setPlaybackTuning(null, speed, semitones, t.vinyl, t.reverb);
+    ImpalaPlayer.setPlaybackTuning(null, speed, semitones, t.vinyl, reverb);
   }
   notify();
 }

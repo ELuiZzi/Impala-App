@@ -65,7 +65,8 @@ export function setAppVolume(volume: number) {
 export type DeckChain = {
   /** 1 = sin cambio de tono. */
   setPitchRatio(ratio: number): void;
-  setReverb(on: boolean): void;
+  /** 0 = apagada, 1 = máxima. */
+  setReverb(amount: number): void;
   gain: GainNode;
 };
 
@@ -105,11 +106,12 @@ export function connectDeck(audio: HTMLAudioElement): DeckChain {
       pendingRatio = ratio;
       pitch?.parameters.get('ratio')!.setValueAtTime(ratio, ctx.currentTime);
     },
-    setReverb(on) {
+    setReverb(amount) {
       const now = ctx.currentTime;
-      // «Slowed + reverb»: sala grande y difusa, bastante presente.
-      wet.gain.setTargetAtTime(on ? 0.5 : 0, now, 0.08);
-      dry.gain.setTargetAtTime(on ? 0.85 : 1, now, 0.08);
+      const a = Math.min(1, Math.max(0, amount));
+      // Como en Android: húmedo = cantidad^1,5 y el seco solo baja (hasta 0,85) en la mitad alta.
+      wet.gain.setTargetAtTime(0.5 * Math.pow(a, 1.5), now, 0.08);
+      dry.gain.setTargetAtTime(1 - 0.15 * Math.max(0, (a - 0.5) / 0.5), now, 0.08);
     },
   };
 }

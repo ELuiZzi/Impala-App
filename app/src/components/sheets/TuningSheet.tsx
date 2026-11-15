@@ -1,9 +1,12 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { Pressable, ScrollView, Switch, Text, View } from 'react-native';
 import {
+  formatReverb,
   formatSemitones,
   formatSpeed,
   presetOf,
+  REVERB_MAX,
+  REVERB_STEP,
   SEMITONES_MAX,
   setTuning,
   SPEED_MAX,
@@ -21,7 +24,7 @@ import { Marquee } from '@/components/Marquee';
 
 /**
  * Velocidad y tono de lo que suena: preajustes (Normal, Sped up, Slowed, Slowed + reverb), el modo de tono
- * (natural o vinilo) y ajuste fino con botones. Cada toque se oye al momento.
+ * (natural o vinilo) y ajuste fino con botones (velocidad, tono y cantidad de reverberación). Cada toque se oye al momento.
  */
 export function TuningSheet({ songId, title, coverArt }: Extract<SheetState, { kind: 'tuning' }>) {
   const accent = useThemeColor('accent');
@@ -45,7 +48,7 @@ export function TuningSheet({ songId, title, coverArt }: Extract<SheetState, { k
             key={p.id}
             label={p.label}
             active={preset?.id === p.id}
-            onPress={() => update(p.id === 'normal' ? { speed: 1, semitones: 0, reverb: false } : { speed: p.speed, semitones: 0, reverb: p.reverb })}
+            onPress={() => update(p.id === 'normal' ? { speed: 1, semitones: 0, reverb: 0 } : { speed: p.speed, semitones: 0, reverb: p.reverb })}
           />
         ))}
         <Chip label="Personalizado" active={!preset} onPress={() => {}} />
@@ -79,7 +82,12 @@ export function TuningSheet({ songId, title, coverArt }: Extract<SheetState, { k
         onMinus={t.semitones > -SEMITONES_MAX ? () => update({ semitones: t.semitones - 1 }) : undefined}
         onPlus={t.semitones < SEMITONES_MAX ? () => update({ semitones: t.semitones + 1 }) : undefined}
       />
-      <SwitchRow label="Reverberación" value={t.reverb} accent={accent} onChange={(reverb) => update({ reverb })} />
+      <Stepper
+        label="Reverberación"
+        value={formatReverb(t.reverb)}
+        onMinus={t.reverb > 0 ? () => update({ reverb: Math.max(0, t.reverb - REVERB_STEP) }) : undefined}
+        onPlus={t.reverb < REVERB_MAX ? () => update({ reverb: Math.min(REVERB_MAX, t.reverb + REVERB_STEP) }) : undefined}
+      />
       <SwitchRow
         label="Recordar solo para esta canción"
         hint={t.perSong ? 'Las demás usan el ajuste general' : 'Se aplica a todas las canciones'}

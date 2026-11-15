@@ -425,7 +425,7 @@ class ImpalaPlayerModule : Module() {
       mapOf("speed" to t.speed.toDouble(), "semitones" to t.semitones.toDouble(), "vinyl" to t.vinyl, "reverb" to t.reverb, "perSong" to (own != null))
     }
     /** Con songId se guarda solo para esa canción; sin él, como ajuste global. */
-    Function("setPlaybackTuning") { songId: String?, speed: Double, semitones: Double, vinyl: Boolean, reverb: Boolean ->
+    Function("setPlaybackTuning") { songId: String?, speed: Double, semitones: Double, vinyl: Boolean, reverb: Int ->
       val prefs = prefs()
       val json = Tuning(speed.toFloat(), semitones.toFloat(), vinyl, reverb).clamped().toJson()
       prefs.edit().putString(songId?.let { PlaybackTuning.songKey(prefs, it) } ?: PlaybackTuning.KEY_GLOBAL, json).apply()

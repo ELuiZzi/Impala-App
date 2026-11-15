@@ -15,8 +15,11 @@ export type NativeTrack = {
 /** speed: velocidad de reproducción (sped up/slowed); la posición es del audio y avanza a ese ritmo. */
 export type ProgressEvent = { positionMs: number; bufferedMs: number; durationMs: number | null; speed: number };
 
-/** Velocidad y tono. vinyl: el tono sigue a la velocidad (como un disco); si no, solo cambia la velocidad. */
-export type PlaybackTuning = { speed: number; semitones: number; vinyl: boolean; reverb: boolean };
+/**
+ * Velocidad y tono. vinyl: el tono sigue a la velocidad (como un disco); si no, solo cambia la velocidad.
+ * reverb: cantidad de reverberación, 0–100 (0 = apagada).
+ */
+export type PlaybackTuning = { speed: number; semitones: number; vinyl: boolean; reverb: number };
 
 export type StateEvent = ProgressEvent & {
   isPlaying: boolean;
@@ -103,7 +106,7 @@ declare class ImpalaPlayerModule extends NativeModule<Events> {
   /** Ajustes propios de la canción (perSong) o los globales; sin songId, los globales. */
   getPlaybackTuning(songId: string | null): PlaybackTuning & { perSong: boolean };
   /** Se aplica al instante; con songId solo para esa canción, sin él como ajuste global. */
-  setPlaybackTuning(songId: string | null, speed: number, semitones: number, vinyl: boolean, reverb: boolean): void;
+  setPlaybackTuning(songId: string | null, speed: number, semitones: number, vinyl: boolean, reverb: number): void;
   clearSongTuning(songId: string): void;
   isTailscaleInstalled(): boolean;
   /** Si Impala enciende Tailscale al abrirse y lo apaga al cerrarse (por defecto, sí). */

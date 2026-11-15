@@ -385,11 +385,12 @@ app/             aplicación Android (Expo SDK 57, React Native 0.86)
 - **Velocidad y tono · Sped up / Slowed** (Fase 5, menú … del reproductor → «Velocidad y tono»): preajustes *Normal*,
   *Sped up* (1,25×), *Slowed* (0,85×) y *Slowed + reverb*, cada uno con tono **Natural** (Sonic de ExoPlayer cambia la
   velocidad sin tocar el tono) o **Vinilo** (el tono sigue a la velocidad, como un disco); ajuste fino de velocidad
-  (0,75×–1,35×, de 0,05 en 0,05), tono extra en semitonos (±6) y reverberación. Se guarda como ajuste general o, con
+  (0,75×–1,35×, de 0,05 en 0,05), tono extra en semitonos (±6) y cantidad de reverberación (0–100 %, de 10 en 10;
+  0 % = «Apagada»; *Slowed + reverb* usa 40 %). Se guarda como ajuste general o, con
   «Recordar solo para esta canción», por canción y fuente. `PlaybackTuning` (en `PlaybackService`) aplica
   `PlaybackParameters(velocidad, tono)` al principal y al fader según la canción que tenga cada uno, así el crossfade
   cuadra (sus tiempos se cuentan en reloj: lo que queda de pista se divide por la velocidad). La reverberación es,
-  desde la 1.6, un procesador propio (`ReverbAudioProcessor`, ver «Versión 1.6»). El reproductor muestra una pastilla («Sped up 1,25×») cuando
+  desde la 1.6, un procesador propio (`ReverbAudioProcessor`, ver «Versión 1.6»). El reproductor muestra una pastilla («Sped up 1,25×», «Slowed + reverb 0,85× · 40 %», «Personalizado 0,85× · reverb 60 %») cuando
   no es Normal; la posición, la barra, las letras y el scrobble siguen el tiempo de la canción (las letras avanzan entre
   informes a la velocidad actual).
 
@@ -417,9 +418,26 @@ app/             aplicación Android (Expo SDK 57, React Native 0.86)
   4 pasa-todo por canal, tiempos escalados a la frecuencia de muestreo) dentro de la cadena de audio de ExoPlayer, **después
   de Sonic**: `ImpalaRenderersFactory` construye el `DefaultAudioSink` con una `AudioProcessorChain` que es la de siempre
   (saltar silencios + Sonic) más la reverberación al final, una por reproductor (principal y fader del crossfade).
-  Parámetros: sala 0,92 (realimentación 0,9576, cola de ~6 s), amortiguación 0,2 (brillante), seco 0,8 y húmedo 1,0
-  (≈40 % de la mezcla). No añade latencia ni cambia el número de muestras (gapless, crossfade y posición intactos); al
-  encender/apagar la mezcla cambia en 60 ms, y apagada solo copia. Funciona con PCM 16 bits o float, mono o estéreo.
+  Amortiguación 0,2 (brillante). Desde la 1.6.1 la **cantidad** (0–100 %, `reverb` entero en el JSON de `tuning_*`;
+  los ajustes viejos `reverb: true/false` se leen como 40/0) decide a la vez cuánto se oye y lo grande que es la sala
+  (`ReverbAudioProcessor.Mix.of`): húmedo = cantidad^1,5; cola = 1 s + 5 s × cantidad (realimentación = 0,9576^(6/cola));
+  seco 1,0 hasta el 50 % y luego baja hasta 0,8 en el 100 % (lo que sonaba en la 1.6.0).
+
+  | Cantidad | Húmedo | Seco | Realimentación | Cola |
+  |---|---|---|---|---|
+  | 0 % | — (sin procesar) | 1,0 | — | — |
+  | 10 % | 0,03 | 1,0 | 0,841 | ~1,5 s |
+  | 20 % | 0,09 | 1,0 | 0,878 | ~2 s |
+  | 40 % (Slowed + reverb) | 0,25 | 1,0 | 0,917 | ~3 s |
+  | 50 % | 0,35 | 1,0 | 0,928 | ~3,5 s |
+  | 70 % | 0,59 | 0,92 | 0,944 | ~4,5 s |
+  | 100 % | 1,0 | 0,8 | 0,9576 | ~6 s |
+
+  Húmedo, seco y realimentación se deslizan hacia el valor nuevo (un polo de 20 ms, ~60 ms en total), así que subir o
+  bajar no hace chasquidos; a 0 %, cuando la parte húmeda llega a cero, se limpia la cola y solo copia. No añade latencia
+  ni cambia el número de muestras (gapless, crossfade y posición intactos). Funciona con PCM 16 bits o float, mono o
+  estéreo. Logcat `ImpalaTuning`: «reverberación 40 %: húmedo 0.25 seco 1.00 realimentación 0.9170 cola ~3.0 s». En el
+  PC (web) la misma cantidad mueve la ganancia húmeda (0,5 × cantidad^1,5) y la seca de la convolución.
 
 ### Crossfade (Fase 7)
 

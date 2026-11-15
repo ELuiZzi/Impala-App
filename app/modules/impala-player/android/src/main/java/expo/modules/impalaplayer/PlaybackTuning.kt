@@ -14,13 +14,13 @@ import kotlin.math.pow
 /**
  * Velocidad y tono ("sped up" / "slowed"). [vinyl]: el tono sigue a la velocidad, como un disco a
  * otras revoluciones; si no, la velocidad cambia sin tocar el tono (Sonic, dentro de ExoPlayer).
- * [semitones] suma (o resta) tono por encima de eso. [reverb]: reverberación de sala grande.
+ * [semitones] suma (o resta) tono por encima de eso. [reverb]: cantidad de reverberación, 0–100 (0 = apagada).
  */
 internal data class Tuning(
   val speed: Float = 1f,
   val semitones: Float = 0f,
   val vinyl: Boolean = false,
-  val reverb: Boolean = false,
+  val reverb: Int = 0,
 ) {
   val pitch: Float get() = (if (vinyl) speed else 1f) * 2.0.pow(semitones / 12.0).toFloat()
 
@@ -31,12 +31,14 @@ internal data class Tuning(
     .put("reverb", reverb)
     .toString()
 
-  fun clamped() = copy(speed = speed.coerceIn(MIN_SPEED, MAX_SPEED), semitones = semitones.coerceIn(-MAX_SEMITONES, MAX_SEMITONES))
+  fun clamped() = copy(speed = speed.coerceIn(MIN_SPEED, MAX_SPEED), semitones = semitones.coerceIn(-MAX_SEMITONES, MAX_SEMITONES), reverb = reverb.coerceIn(0, 100))
 
   companion object {
     const val MIN_SPEED = 0.5f
     const val MAX_SPEED = 2f
     const val MAX_SEMITONES = 12f
+    /** Cantidad del preajuste «Slowed + reverb»; también la que reciben los ajustes viejos con reverb encendida. */
+    const val DEFAULT_REVERB = 40
 
     fun parse(json: String?): Tuning? = try {
       json?.let {
@@ -45,7 +47,12 @@ internal data class Tuning(
           o.optDouble("speed", 1.0).toFloat(),
           o.optDouble("semitones", 0.0).toFloat(),
           o.optBoolean("vinyl", false),
-          o.optBoolean("reverb", false),
+          // Hasta ahora era un sí/no: encendida pasa a la cantidad por defecto.
+          when (val r = o.opt("reverb")) {
+            is Boolean -> if (r) DEFAULT_REVERB else 0
+            is Number -> r.toInt()
+            else -> 0
+          },
         ).clamped()
       }
     } catch (e: Exception) {
@@ -85,7 +92,7 @@ internal class PlaybackTuning(context: Context) : SharedPreferences.OnSharedPref
   /** Llamar antes de liberar el reproductor. */
   fun detach(player: ExoPlayer) {
     listeners.remove(player)?.let { player.removeListener(it) }
-    reverbs.remove(player)?.enabled = false
+    reverbs.remove(player)?.amount = 0f
   }
 
   fun release() {
@@ -110,11 +117,12 @@ internal class PlaybackTuning(context: Context) : SharedPreferences.OnSharedPref
     setReverb(player, t.reverb)
   }
 
-  private fun setReverb(player: ExoPlayer, on: Boolean) {
+  private fun setReverb(player: ExoPlayer, percent: Int) {
     val reverb = reverbs[player] ?: return
-    if (reverb.enabled != on) {
-      reverb.enabled = on
-      Log.d(TAG, "reverberación ${if (on) "activa" else "apagada"} (Freeverb propio: sala ${ReverbAudioProcessor.FEEDBACK}, seco ${ReverbAudioProcessor.DRY}, húmedo ${ReverbAudioProcessor.WET}) en ${player.currentMediaItem?.mediaId}")
+    val amount = percent / 100f
+    if (reverb.amount != amount) {
+      reverb.amount = amount
+      Log.d(TAG, "reverberación $percent %: ${ReverbAudioProcessor.Mix.of(amount)} en ${player.currentMediaItem?.mediaId}")
     }
   }
 

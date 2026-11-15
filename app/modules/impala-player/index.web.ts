@@ -58,7 +58,7 @@ const ImpalaPlayer = {
     engine.applyTuningToAll();
   },
   getPlaybackTuning: (songId: string | null) => tuningFor(songId),
-  setPlaybackTuning: (songId: string | null, speed: number, semitones: number, vinyl: boolean, reverb: boolean) => {
+  setPlaybackTuning: (songId: string | null, speed: number, semitones: number, vinyl: boolean, reverb: number) => {
     saveTuning(songId, { speed, semitones, vinyl, reverb });
     engine.applyTuningToAll();
   },

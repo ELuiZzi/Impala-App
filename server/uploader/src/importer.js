@@ -85,7 +85,9 @@ export function createImporter({
   async function analyze(job) {
     const playlist = await readPlaylist(job.url);
     Object.assign(job, { name: playlist.name, curator: playlist.curator, artwork: playlist.artwork, trackCount: playlist.trackCount, status: 'matching' });
-    if (playlist.trackCount > playlist.tracks.length) {
+    if (playlist.capped) {
+      job.warning = `Apple Music solo mostró las primeras ${playlist.tracks.length} canciones; la playlist puede tener más.`;
+    } else if (playlist.trackCount > playlist.tracks.length) {
       job.warning = `Apple Music solo mostró ${playlist.tracks.length} de ${playlist.trackCount} canciones.`;
     }
     job.tracks = playlist.tracks.map((t, index) => ({ index, ...t, state: 'pending', match: null, error: null }));

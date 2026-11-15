@@ -11,6 +11,9 @@ const BLOB = require('../../../assets/blob.png');
 /** Colores de reserva (sin carátula o mientras se analizan): el tono de Impala sobre negro. */
 const FALLBACK = ['#3a0d14', '#1c1c1e', '#5b1220', '#121212'];
 
+/** Cuánto se mueven las manchas: 1,05 = un 5 % más rápido y un 5 % más de recorrido que el diseño original. */
+const MOTION = 1.05;
+
 /**
  * Fondo del reproductor a pantalla completa, al estilo de Apple Music: manchas de los colores de la
  * carátula que giran y se desplazan muy despacio, mezclándose entre sí. Al cambiar de canción, el
@@ -30,7 +33,7 @@ export function AnimatedBackdrop({ artworkUrl, playing }: { artworkUrl?: string;
   // Un reloj común: en pausa se mueve más despacio, como "respirando".
   const clock = useSharedValue(0);
   useEffect(() => {
-    clock.value = withRepeat(withTiming(clock.value + 1, { duration: playing ? 60_000 : 160_000, easing: Easing.linear }), -1, false);
+    clock.value = withRepeat(withTiming(clock.value + 1, { duration: (playing ? 60_000 : 160_000) / MOTION, easing: Easing.linear }), -1, false);
   }, [playing, clock]);
 
   return (
@@ -65,10 +68,11 @@ function Blob({ clock, color, origin, spin, orbit, drift }: {
   const size = Math.max(width, height) * 1.1;
   const style = useAnimatedStyle(() => {
     const t = clock.value * Math.PI * 2;
+    const reach = drift * MOTION;
     return {
       transform: [
-        { translateX: origin.x * width + Math.sin(t * orbit[0]) * drift * width },
-        { translateY: origin.y * height + Math.cos(t * orbit[1]) * drift * height },
+        { translateX: origin.x * width + Math.sin(t * orbit[0]) * reach * width },
+        { translateY: origin.y * height + Math.cos(t * orbit[1]) * reach * height },
         { rotate: `${clock.value * 360 * spin}deg` },
       ],
     };

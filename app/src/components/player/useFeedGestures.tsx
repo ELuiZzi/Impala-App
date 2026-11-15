@@ -19,6 +19,7 @@ const PAGE_FRACTION = 0.15;
 const PAGE_VELOCITY = 700;
 /** Entre dos toques: lo que tarda en responder un toque simple (debe esperar a descartar el doble). */
 const DOUBLE_TAP_MS = 250;
+const LONG_PRESS_MS = 450;
 const ENTER = { duration: 280, easing: Easing.out(Easing.cubic) };
 
 export type FeedGestureOptions = {
@@ -34,6 +35,8 @@ export type FeedGestureOptions = {
   /** Toque simple. Devuelve el icono que se muestra un momento (p. ej. «pause» o «play»). */
   onTap: () => keyof typeof Ionicons.glyphMap;
   onDoubleTap: () => void;
+  /** Mantener pulsado (sin mover el dedo). */
+  onLongPress?: () => void;
   /** Otros gestos sobre la misma zona que compiten con estos (p. ej. cerrar con dos dedos). */
   extra?: GestureType[];
 };
@@ -85,6 +88,7 @@ export function useFeedGestures(opts: FeedGestureOptions) {
   const restart = () => opts.onPrevious();
   const tap = () => setTapIcon(opts.onTap());
   const doubleTap = () => opts.onDoubleTap();
+  const longPress = () => opts.onLongPress?.();
 
   const pan = Gesture.Pan()
     .enabled(enabled)
@@ -137,7 +141,16 @@ export function useFeedGestures(opts: FeedGestureOptions) {
       scheduleOnRN(doubleTap);
     });
 
-  const gesture = Gesture.Race(...(opts.extra ?? []), pan, Gesture.Exclusive(double, single));
+  // Se activa mientras el dedo sigue apoyado, antes de que el toque simple (que espera a levantarlo) cuente.
+  const hold = Gesture.LongPress()
+    .enabled(enabled && !!opts.onLongPress)
+    .minDuration(LONG_PRESS_MS)
+    .maxDistance(12)
+    .onStart(() => {
+      scheduleOnRN(longPress);
+    });
+
+  const gesture = Gesture.Race(...(opts.extra ?? []), pan, hold, Gesture.Exclusive(double, single));
 
   const pageStyle = useAnimatedStyle(() => {
     const y = pageY.get();

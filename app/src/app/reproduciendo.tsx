@@ -1,10 +1,11 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
+import * as Haptics from 'expo-haptics';
 import { router } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, Animated, BackHandler, Pressable, Text, useWindowDimensions, View } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
-import Reanimated, { useAnimatedStyle, useSharedValue, withSpring, withTiming } from 'react-native-reanimated';
+import Reanimated, { FadeIn, FadeOut, useAnimatedStyle, useSharedValue, withSpring, withTiming } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { scheduleOnRN } from 'react-native-worklets';
 import { DATA_SAVER_FORMAT } from '@/api/subsonic';
@@ -31,6 +32,9 @@ import { Marquee } from '@/components/Marquee';
 /** Deslizar hacia abajo más de esta fracción de la pantalla (o lanzar rápido) cierra el reproductor. */
 const DISMISS_FRACTION = 0.2;
 const DISMISS_VELOCITY = 900;
+/** Aleatorio y repetir (modo con gestos): cuánto se quedan si no se tocan, y tras tocar uno. */
+const MODES_AUTO_HIDE_MS = 4000;
+const MODES_AFTER_PRESS_MS = 700;
 
 /** La letra con un solo botón que va pasando: oculta → en el reproductor → a pantalla completa → oculta. */
 type LyricsMode = 'off' | 'inline' | 'full';
@@ -90,6 +94,27 @@ export default function ReproduciendoScreen() {
     setHint(false);
     void markGestureHintSeen();
   };
+
+  // Con gestos, aleatorio y repetir aparecen al mantener pulsada la carátula y se van al usarlos (o solos).
+  const [modesOpen, setModesOpen] = useState(false);
+  const modesTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const hideModes = (afterMs: number) => {
+    if (modesTimer.current) clearTimeout(modesTimer.current);
+    modesTimer.current = setTimeout(() => setModesOpen(false), afterMs);
+  };
+  const openModes = () => {
+    void Haptics.performAndroidHapticsAsync(Haptics.AndroidHaptics.Long_Press).catch(() => {});
+    setModesOpen(true);
+    hideModes(MODES_AUTO_HIDE_MS);
+  };
+  // Tras tocar uno se ve un momento su nuevo estado y desaparecen.
+  const pressMode = (action: () => unknown) => {
+    void action();
+    hideModes(MODES_AFTER_PRESS_MS);
+  };
+  useEffect(() => () => {
+    if (modesTimer.current) clearTimeout(modesTimer.current);
+  }, []);
 
   // Atrás sale de la pantalla completa (a la letra en el reproductor) antes de cerrar el reproductor.
   useEffect(() => {
@@ -157,6 +182,7 @@ export default function ReproduciendoScreen() {
     onNext: () => void next(),
     onPrevious: () => void previousTrack(),
     onTap: () => {
+      setModesOpen(false);
       void togglePlay();
       return wantsToPlay ? 'pause' : 'play';
     },
@@ -164,6 +190,7 @@ export default function ReproduciendoScreen() {
     onDoubleTap: () => {
       if (song && !favorite) setFavorite(source, song, true).catch(() => {});
     },
+    onLongPress: openModes,
   });
   // Solo el valor compartido: el worklet no puede copiar el objeto entero (lleva el gesto).
   const feedPageY = feed.pageY;
@@ -362,7 +389,8 @@ export default function ReproduciendoScreen() {
             {showLyrics ? (
               <View className="flex-1 my-3">{lyricsView}</View>
             ) : (
-              // Con gestos, toda esta zona (no los botones) responde a deslizar, tocar y doble toque.
+              // Con gestos, toda esta zona (no los botones) responde a deslizar, tocar, doble toque y mantener.
+              <View className="flex-1">
               <GestureDetector gesture={feed.gesture}>
                 <View collapsable={false} className="flex-1 items-center justify-center">
                   <Reanimated.View style={gestureMode ? feed.pageStyle : undefined}>
@@ -387,6 +415,25 @@ export default function ReproduciendoScreen() {
                   {gestureMode && <FeedFeedback tapPulse={feed.tapPulse} burst={feed.burst} tapIcon={feed.tapIcon} />}
                 </View>
               </GestureDetector>
+              {/* Fuera del detector: sus toques y los Pressable no se excluyen entre sí. */}
+              {gestureMode && modesOpen && (
+                <Reanimated.View
+                  entering={FadeIn.duration(160)}
+                  exiting={FadeOut.duration(220)}
+                  className="absolute bottom-2 left-0 right-0 flex-row justify-center gap-3"
+                >
+                  <ModePill icon="shuffle" active={shuffle} text="Aleatorio" onPress={() => pressMode(toggleShuffle)} label={shuffle ? 'Desactivar aleatorio' : 'Activar aleatorio'} />
+                  <ModePill
+                    icon="repeat"
+                    active={repeatMode !== 'off'}
+                    badge={repeatMode === 'one' ? '1' : undefined}
+                    text={repeatMode === 'one' ? 'Repetir una' : repeatMode === 'all' ? 'Repetir todo' : 'Repetir'}
+                    onPress={() => pressMode(cycleRepeat)}
+                    label={repeatMode === 'off' ? 'Repetir todo' : repeatMode === 'all' ? 'Repetir una' : 'No repetir'}
+                  />
+                </Reanimated.View>
+              )}
+              </View>
             )}
 
             {controls}
@@ -501,6 +548,28 @@ function ModeButton({ icon, active, badge, onPress, label }: {
       <View className={`w-10 h-8 rounded-lg items-center justify-center ${active ? 'bg-white/90' : 'bg-white/10'}`}>
         <Ionicons name={icon} size={19} color={active ? 'black' : 'rgba(255,255,255,0.75)'} />
         {badge && <Text className="absolute right-1 top-0.5 text-black text-[9px] font-bold">{badge}</Text>}
+      </View>
+    </Pressable>
+  );
+}
+
+/** Aleatorio o repetir en el modo con gestos: más grande que ModeButton y con su nombre, flotando sobre la carátula. */
+function ModePill({ icon, active, badge, text, onPress, label }: {
+  icon: keyof typeof Ionicons.glyphMap;
+  active: boolean;
+  badge?: string;
+  text: string;
+  onPress: () => void;
+  label: string;
+}) {
+  return (
+    <Pressable onPress={onPress} hitSlop={8} accessibilityLabel={label} className="active:opacity-60">
+      <View className={`h-11 px-4 rounded-full flex-row items-center gap-2 ${active ? 'bg-white' : 'bg-black/55'}`}>
+        <View>
+          <Ionicons name={icon} size={20} color={active ? 'black' : 'white'} />
+          {badge && <Text className="absolute -right-1.5 -top-1 text-black text-[9px] font-bold">{badge}</Text>}
+        </View>
+        <Text className={`text-[15px] font-semibold ${active ? 'text-black' : 'text-white'}`}>{text}</Text>
       </View>
     </Pressable>
   );

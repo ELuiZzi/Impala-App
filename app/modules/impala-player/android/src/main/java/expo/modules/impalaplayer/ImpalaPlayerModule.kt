@@ -380,15 +380,13 @@ class ImpalaPlayerModule : Module() {
     AsyncFunction("setUpcomingOrder") { order: List<Int>, promise: Promise ->
       command(promise) { c ->
         val start = c.currentMediaItemIndex + 1
-        val positions = (start until c.mediaItemCount).toMutableList() // positions[i] = índice original en la posición start+i
-        require(order.sorted() == positions.sorted()) { "El nuevo orden no coincide con las pistas siguientes" }
-        order.forEachIndexed { i, original ->
-          val currentPos = positions.indexOf(original)
-          if (currentPos != i) {
-            c.moveMediaItem(start + currentPos, start + i)
-            positions.add(i, positions.removeAt(currentPos))
-          }
-        }
+        val end = c.mediaItemCount
+        require(order.sorted() == (start until end).toList()) { "El nuevo orden no coincide con las pistas siguientes" }
+        // Todo de una vez: antes se movía pista a pista y, con cientos de canciones, eran cientos de llamadas al
+        // servicio (cada una con su cambio de cola, notificación y evento a JS) y la app se trababa al mezclar.
+        // Los MediaItem del controlador conservan requestMetadata.mediaUri: el servicio rehace su URI al recibirlos.
+        val items = order.map { c.getMediaItemAt(it) }
+        if (order != (start until end).toList()) c.replaceMediaItems(start, end, items)
       }
     }.runOnQueue(Queues.MAIN)
 

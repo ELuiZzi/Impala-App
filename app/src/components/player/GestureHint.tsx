@@ -6,6 +6,7 @@ const ROWS: { icon: keyof typeof Ionicons.glyphMap; title: string; detail: strin
   { icon: 'arrow-down', title: 'Desliza hacia abajo', detail: 'Canción anterior' },
   { icon: 'finger-print', title: 'Toca la carátula', detail: 'Pausar o seguir' },
   { icon: 'star', title: 'Doble toque', detail: 'Añadir a favoritas' },
+  { icon: 'shuffle', title: 'Mantén pulsada la carátula', detail: 'Aleatorio y repetir' },
   { icon: 'chevron-down', title: 'Dos dedos hacia abajo', detail: 'Cerrar el reproductor' },
 ];
 

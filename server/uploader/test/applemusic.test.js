@@ -252,3 +252,36 @@ test('importar a una playlist existente: añade solo las que faltan, sin tocar l
   assert.equal(done.name, 'Gym');
   assert.deepEqual(updates, [{ id: 'pl-gym', add: ['nd-2'] }]);
 });
+
+test('más de 300 canciones: pide el resto a la API de la web con su token', async () => {
+  const b64 = (o) => Buffer.from(JSON.stringify(o)).toString('base64url');
+  const token = `${b64({ alg: 'ES256' })}.${b64({ iss: 'AMPWebPlay', exp: Date.now() / 1000 + 3600 })}.firmaFalsaDePrueba`;
+  const old = `${b64({ alg: 'ES256' })}.${b64({ iss: 'Otro' })}.firmaFalsaDePrueba`;
+  const songs = Array.from({ length: 350 }, (_, i) => [`Canción ${i + 1}`, 'Artista', 'Álbum', 200_000]);
+  // La página se queda en 300 y su cabecera dice 300, como la de verdad.
+  const page = applePage(songs.slice(0, 300)).replace('<html>', '<html><script type="module" crossorigin src="/assets/index~Abc123.js"></script>');
+  const seen = [];
+  const fetchImpl = async (url, init = {}) => {
+    seen.push(url);
+    if (url.startsWith('https://music.apple.com/us/playlist/')) return new Response(page);
+    if (url === 'https://music.apple.com/assets/index~Abc123.js') return new Response(`const a="${old}",b="${token}";`);
+    const m = /amp-api\.music\.apple\.com\/v1\/catalog\/us\/playlists\/pl\.u-AbCdEf123456\/tracks\?offset=(\d+)&limit=100$/.exec(url);
+    assert.ok(m, url);
+    assert.equal(init.headers.authorization, `Bearer ${token}`);
+    assert.equal(init.headers.origin, 'https://music.apple.com');
+    const data = songs.slice(+m[1], +m[1] + 100).map(([name, artistName, albumName, durationInMillis]) => ({ attributes: { name, artistName, albumName, durationInMillis } }));
+    return data.length ? Response.json({ data }) : new Response('', { status: 404 });
+  };
+  const playlist = await readApplePlaylist('https://music.apple.com/us/playlist/pl.u-AbCdEf123456', { fetchImpl });
+  assert.equal(playlist.tracks.length, 350);
+  assert.equal(playlist.trackCount, 350);
+  assert.equal(playlist.capped, false);
+  assert.equal(playlist.tracks[349].title, 'Canción 350');
+  assert.equal(seen.filter((u) => u.includes('amp-api')).length, 4);
+
+  // Si la API falla, se queda lo de la página y se marca para avisar.
+  const failing = async (url, init) => (url.includes('amp-api') ? new Response('', { status: 401 }) : fetchImpl(url, init));
+  const partial = await readApplePlaylist('https://music.apple.com/us/playlist/pl.u-AbCdEf123456', { fetchImpl: failing });
+  assert.equal(partial.tracks.length, 300);
+  assert.equal(partial.capped, true);
+});

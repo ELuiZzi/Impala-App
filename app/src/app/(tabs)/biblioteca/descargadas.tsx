@@ -23,7 +23,7 @@ export default function DescargadasScreen() {
   const songs = useMemo(() => offlineSongs(index), [index]);
   const bytes = totalBytes(index);
   const [query, setQuery] = useState('');
-  // Con una búsqueda, "Reproducir" y tocar una canción usan solo los resultados.
+  // La búsqueda solo cambia lo que se ve: "Reproducir" y tocar una canción usan todas las descargas.
   const shown = useMemo(() => songs.filter((s) => matchesQuery(query, s.title, s.artist, s.album)), [songs, query]);
   const activeSong = active ? pending.find((p) => p.id === active.id) : undefined;
 
@@ -58,7 +58,7 @@ export default function DescargadasScreen() {
 
       {songs.length > 0 && (
         <>
-          <PlayButtons songs={shown} />
+          <PlayButtons songs={songs} />
           <View className="pb-3">
             <SearchField value={query} onChangeText={setQuery} placeholder="Buscar en tus descargas" />
           </View>
@@ -86,8 +86,8 @@ export default function DescargadasScreen() {
         )
       }
       contentContainerStyle={{ paddingBottom: 32 }}
-      renderItem={({ item, index: i }) => (
-        <SongRow song={item} onPress={() => playSongs(shown, i)} onMore={() => openSongActions(source, item)} />
+      renderItem={({ item }) => (
+        <SongRow song={item} onPress={() => playSongs(songs, Math.max(0, songs.indexOf(item)))} onMore={() => openSongActions(source, item)} />
       )}
     />
   );

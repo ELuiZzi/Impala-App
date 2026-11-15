@@ -54,7 +54,7 @@ function ViewMode({ playlist: p, onEdit }: { playlist: PlaylistWithSongs; onEdit
   const pinKey = favorites ? FAVORITES_PIN : p.id;
   const pinned = usePins().includes(pinKey);
   const filter = useSongFilter(songs, { key: `playlist:${p.id}`, sorts: PLAYLIST_SORTS, initial: 'original' });
-  const shown = filter.items.map((i) => i.song);
+  const shown = filter.queue; // la playlist entera en el orden elegido, aunque se esté buscando
 
   const gym = getGymRamp();
   const openMenu = () =>
@@ -164,10 +164,10 @@ function ViewMode({ playlist: p, onEdit }: { playlist: PlaylistWithSongs; onEdit
         )
       }
       ListFooterComponent={<Text className="text-muted text-sm px-5 pt-4 pb-10">{footer}</Text>}
-      renderItem={({ item, index }) => (
+      renderItem={({ item }) => (
         <SongRow
           song={item.song}
-          onPress={() => playSongs(shown, index)}
+          onPress={() => playSongs(shown, filter.queueIndex(item))}
           onMore={() => openSongActions(source, item.song, { playlist: { id: p.id, index: item.index, favorites } })}
         />
       )}

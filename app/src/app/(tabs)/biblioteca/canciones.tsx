@@ -18,7 +18,7 @@ export default function CancionesScreen() {
   const accent = useThemeColor('accent');
   const data = songs.data?.pages.flat() ?? [];
   const filter = useSongFilter(data, { key: 'canciones', sorts: ['title', 'artist', 'album', 'recent', 'duration'], initial: 'title' });
-  const shown = filter.items.map((i) => i.song);
+  const shown = filter.queue; // todas, en el orden elegido, aunque se esté buscando
 
   // Buscar, ordenar y "Reproducir todo" necesitan la biblioteca completa: se piden todas las páginas.
   useEffect(() => {
@@ -67,7 +67,7 @@ export default function CancionesScreen() {
       refreshing={songs.isRefetching && !songs.isFetchingNextPage}
       onRefresh={songs.refetch}
       contentContainerStyle={{ paddingBottom: 32 }}
-      renderItem={({ item, index }) => <SongRow song={item.song} onPress={() => playSongs(shown, index)} onMore={() => openSongActions(source, item.song)} />}
+      renderItem={({ item }) => <SongRow song={item.song} onPress={() => playSongs(shown, filter.queueIndex(item))} onMore={() => openSongActions(source, item.song)} />}
     />
   );
 }

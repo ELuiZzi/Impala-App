@@ -119,13 +119,15 @@ export function useSongFilter(songs: Song[], { key, sorts, initial }: { key: str
     setStateRaw(next);
   };
 
-  const items = useMemo(() => {
-    const list = songs.map((song, index) => ({ song, index })).filter(({ song }) => matchesQuery(query, song.title, song.artist, song.album));
-    return sortIndexed(list, state);
-  }, [songs, query, state]);
+  // Toda la lista en el orden elegido: es lo que se reproduce aunque la búsqueda muestre solo unas pocas.
+  const ordered = useMemo(() => sortIndexed(songs.map((song, index) => ({ song, index })), state), [songs, state]);
+  const items = useMemo(() => ordered.filter(({ song }) => matchesQuery(query, song.title, song.artist, song.album)), [ordered, query]);
+  const queue = useMemo(() => ordered.map((i) => i.song), [ordered]);
+  /** Posición en `queue` de una fila de `items` (la búsqueda no recorta la cola). */
+  const queueIndex = (item: IndexedSong) => Math.max(0, ordered.findIndex((i) => i.index === item.index));
 
   const isDefault = state.sort === initial && !state.descending;
-  return { items, query, setQuery, sort: state, setSort, sorts, initial, isDefault, filtering: query.trim().length > 0 || !isDefault };
+  return { items, queue, queueIndex, query, setQuery, sort: state, setSort, sorts, initial, isDefault, filtering: query.trim().length > 0 || !isDefault };
 }
 
 export type SongFilter = ReturnType<typeof useSongFilter>;

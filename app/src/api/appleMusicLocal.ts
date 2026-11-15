@@ -25,6 +25,12 @@ export type AppleImportOptions = { name: string; skip: number[]; appendTo?: stri
 /** music.apple.com/{país}/playlist/{nombre opcional}/{pl.…}; los enlaces compartidos son iguales. */
 const PLAYLIST_URL = /^https:\/\/(?:embed\.|beta\.)?music\.apple\.com\/([a-z]{2})\/playlist\/(?:[^/?#]+\/)?(pl\.[A-Za-z0-9_-]{8,80})(?:[/?#]|$)/i;
 const PAGE_TIMEOUT_MS = 20_000;
+const BROWSER_UA = 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126 Safari/537.36';
+/** La API que usa la web de Apple Music para ir cargando las canciones de 100 en 100 al bajar por la lista. */
+const AMP_API = 'https://amp-api.music.apple.com/v1/catalog';
+const AMP_PAGE = 100;
+/** La página web trae como mucho estas canciones (y su cabecera dice este mismo total aunque haya más). */
+const PAGE_CAP = 300;
 const MAX_PAGE_CHARS = 8 * 1024 ** 2;
 const MAX_TRACKS = 1000;
 /** " - Single", " - EP": Apple los añade al nombre del álbum; no forman parte del título real. */
@@ -122,7 +128,7 @@ function parsePlaylistUrl(input: string) {
   return `https://music.apple.com/${storefront}/playlist/${m[2]}`;
 }
 
-type ApplePlaylist = { name: string; curator: string | null; artwork: string | null; trackCount: number; tracks: Omit<ImportTrack, 'index' | 'state' | 'match' | 'error' | 'progress' | 'waitingUntil'>[] };
+type ApplePlaylist = { name: string; curator: string | null; artwork: string | null; trackCount: number; capped?: boolean; tracks: Omit<ImportTrack, 'index' | 'state' | 'match' | 'error' | 'progress' | 'waitingUntil'>[] };
 
 /** La página web de la playlist: la propia web incrusta sus datos en "serialized-server-data" (como el servidor). */
 async function readApplePlaylist(url: string): Promise<ApplePlaylist> {
@@ -131,7 +137,7 @@ async function readApplePlaylist(url: string): Promise<ApplePlaylist> {
   let html: string;
   try {
     const res = await fetch(url, {
-      headers: { 'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126 Safari/537.36', 'Accept-Language': 'es,en;q=0.8' },
+      headers: { 'User-Agent': BROWSER_UA, 'Accept-Language': 'es,en;q=0.8' },
       signal: controller.signal,
     });
     if (res.status === 404) throw new ImportError('Apple Music no encontró la playlist. ¿Es pública?');
@@ -143,7 +149,86 @@ async function readApplePlaylist(url: string): Promise<ApplePlaylist> {
     clearTimeout(timer);
   }
   if (html.length > MAX_PAGE_CHARS) throw new ImportError('La página de Apple Music es demasiado grande');
-  return parsePlaylistPage(html);
+  const playlist = parsePlaylistPage(html);
+  // La página solo trae las 300 primeras: el resto se pide como lo hace la propia web al bajar por la lista.
+  if (playlist.capped || playlist.trackCount > playlist.tracks.length) {
+    try {
+      const all = await readAllTracks(url, html);
+      if (all.length > playlist.tracks.length) {
+        playlist.tracks = all;
+        playlist.trackCount = Math.max(playlist.trackCount, all.length);
+      }
+      playlist.capped = false;
+    } catch (e) {
+      // Si falla, se importa lo que trae la página y el aviso de "solo mostró X de Y" lo explica.
+      console.warn('Importar: no se pudieron leer las demás canciones de Apple Music:', e instanceof Error ? e.message : e);
+    }
+  }
+  return playlist;
+}
+
+/** Todas las canciones (hasta MAX_TRACKS) con la API de la web, usando el token que la web lleva en su JavaScript. */
+async function readAllTracks(url: string, html: string): Promise<ApplePlaylist['tracks']> {
+  const m = /\/([a-z]{2})\/playlist\/(pl\.[A-Za-z0-9_-]+)$/.exec(url);
+  if (!m) throw new Error('Enlace inesperado');
+  const token = await webToken(html);
+  const items: any[] = [];
+  for (let offset = 0; offset < MAX_TRACKS; offset += AMP_PAGE) {
+    const res = await fetchWithTimeout(`${AMP_API}/${m[1]}/playlists/${m[2]}/tracks?offset=${offset}&limit=${AMP_PAGE}`, {
+      headers: { Authorization: `Bearer ${token}`, Origin: 'https://music.apple.com', 'User-Agent': BROWSER_UA },
+    });
+    if (res.status === 404 && offset > 0) break; // pasada la última canción
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const body = await res.json();
+    const page: any[] = Array.isArray(body?.data) ? body.data : [];
+    items.push(...page);
+    if (page.length < AMP_PAGE) break;
+  }
+  return items
+    .map((it) => {
+      const a = it?.attributes ?? {};
+      return {
+        title: String(a.name ?? '').trim(),
+        artist: String(a.artistName ?? '').trim(),
+        album: cleanAlbum(a.albumName),
+        durationSec: Number.isFinite(a.durationInMillis) ? Math.round(a.durationInMillis / 1000) : null,
+        explicit: a.contentRating === 'explicit',
+        artwork: artworkUrl(a.artwork?.url, 300),
+      };
+    })
+    .filter((t) => t.title && t.artist)
+    .slice(0, MAX_TRACKS);
+}
+
+/** El token anónimo de la web de Apple Music: un JWT dentro de su JavaScript principal (/assets/index~….js). */
+async function webToken(html: string): Promise<string> {
+  const src = /<script[^>]+src="(\/assets\/index[^"]*\.js)"/.exec(html)?.[1];
+  if (!src) throw new Error('No se encontró el JavaScript de la web');
+  const res = await fetchWithTimeout(`https://music.apple.com${src}`, { headers: { 'User-Agent': BROWSER_UA } });
+  if (!res.ok) throw new Error(`HTTP ${res.status} al leer la web`);
+  const js = await res.text();
+  const now = Date.now() / 1000;
+  const tokens = [...new Set(js.match(/eyJ[\w-]{10,}\.[\w-]{10,}\.[\w-]{10,}/g) ?? [])];
+  const token = tokens.find((t) => {
+    try {
+      const payload = JSON.parse(atob(t.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')));
+      return payload?.iss === 'AMPWebPlay' && (!payload.exp || payload.exp > now);
+    } catch {
+      return false;
+    }
+  });
+  if (!token) throw new Error('No se encontró el token de la web');
+  return token;
+}
+
+async function fetchWithTimeout(url: string, init: RequestInit): Promise<Response> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), PAGE_TIMEOUT_MS);
+  try {
+    return await fetch(url, { ...init, signal: controller.signal });
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 const FORMAT_CHANGED = 'La página de Apple Music cambió de formato; actualiza Impala o usa el modo servidor';
@@ -181,6 +266,7 @@ function parsePlaylistPage(html: string): ApplePlaylist {
     curator: header?.subtitleLinks?.[0]?.title ?? null,
     artwork: artworkUrl(header?.artwork?.dictionary?.url, 600),
     trackCount: Number.isInteger(header?.trackCount) ? header.trackCount : tracks.length,
+    capped: items.length >= PAGE_CAP,
     tracks,
   };
 }
@@ -228,7 +314,8 @@ export function createLocalAppleImport(input: string): ImportJob {
 async function analyze(job: Job) {
   const playlist = await readApplePlaylist(job.url);
   Object.assign(job, { name: playlist.name, curator: playlist.curator, artwork: playlist.artwork, trackCount: playlist.trackCount, status: 'matching' });
-  if (playlist.trackCount > playlist.tracks.length) job.warning = `Apple Music solo mostró ${playlist.tracks.length} de ${playlist.trackCount} canciones.`;
+  if (playlist.capped) job.warning = `Apple Music solo mostró las primeras ${playlist.tracks.length} canciones; la playlist puede tener más.`;
+  else if (playlist.trackCount > playlist.tracks.length) job.warning = `Apple Music solo mostró ${playlist.tracks.length} de ${playlist.trackCount} canciones.`;
   job.tracks = playlist.tracks.map((t, index) => ({ index, ...t, state: 'pending', match: null, error: null, progress: null, waitingUntil: null }));
   const total = job.tracks.length * 2;
   changed();

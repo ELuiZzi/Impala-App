@@ -1,0 +1,20 @@
+plugins {
+  id 'com.android.library'
+  id 'expo-module-gradle-plugin'
+}
+
+group = 'expo.modules.impalalibrary'
+version = '0.1.0'
+
+android {
+  namespace "expo.modules.impalalibrary"
+  defaultConfig {
+    versionCode 1
+    versionName "0.1.0"
+  }
+}
+
+dependencies {
+  // FileProvider: el APK de una actualización se le pasa al instalador del sistema como content://.
+  implementation "androidx.core:core-ktx:1.13.1"
+}

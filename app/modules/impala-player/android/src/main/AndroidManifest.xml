@@ -1,0 +1,27 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+  <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+  <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
+  <uses-permission android:name="android.permission.WAKE_LOCK" />
+  <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+
+  <!-- Para enviarle a Tailscale las órdenes de conectar/desconectar (visibilidad de paquetes, Android 11+) -->
+  <queries>
+    <package android:name="com.tailscale.ipn" />
+  </queries>
+
+  <application>
+    <!-- exported: lo controlan la pantalla de bloqueo, Bluetooth y otros controladores del sistema -->
+    <service
+      android:name="expo.modules.impalaplayer.PlaybackService"
+      android:exported="true"
+      android:foregroundServiceType="mediaPlayback">
+      <intent-filter>
+        <action android:name="androidx.media3.session.MediaSessionService" />
+      </intent-filter>
+    </service>
+
+    <!-- Vigila el cierre de la app para apagar Tailscale (ver Tailscale.kt) -->
+    <service android:name="expo.modules.impalaplayer.SessionWatchService" android:exported="false" />
+  </application>
+</manifest>

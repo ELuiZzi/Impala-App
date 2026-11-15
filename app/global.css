@@ -1,0 +1,27 @@
+@import 'tailwindcss';
+@import 'uniwind';
+
+/* Paleta inspirada en Apple Music; sigue el tema claro/oscuro del sistema. */
+@layer theme {
+  :root {
+    @variant light {
+      --color-background: #ffffff;
+      --color-card: #f2f2f7;
+      --color-foreground: #000000;
+      --color-muted: #8e8e93;
+      --color-separator: #e5e5ea;
+      --color-accent: #fa2d48;
+      --color-accent-foreground: #ffffff;
+    }
+
+    @variant dark {
+      --color-background: #000000;
+      --color-card: #1c1c1e;
+      --color-foreground: #ffffff;
+      --color-muted: #8e8e93;
+      --color-separator: #38383a;
+      --color-accent: #fa2d48;
+      --color-accent-foreground: #ffffff;
+    }
+  }
+}

@@ -1,0 +1,12 @@
+node_modules/
+.env
+*.jks
+*.keystore
+.idea/
+.vscode/
+
+# APKs compiladas
+/dist/
+
+# Caché de Gradle (p. ej. la del módulo nativo impala-player)
+.gradle/

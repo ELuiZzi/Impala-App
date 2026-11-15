@@ -1,0 +1,3 @@
+# Los scripts y configs que corren en Linux deben mantener finales de línea LF
+*.sh  text eol=lf
+*.yml text eol=lf

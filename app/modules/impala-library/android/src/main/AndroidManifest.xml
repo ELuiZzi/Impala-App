@@ -1,0 +1,20 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+  <!-- Leer la música del teléfono: «Música y audio» en Android 13+, el almacenamiento en 12 y anteriores. -->
+  <uses-permission android:name="android.permission.READ_MEDIA_AUDIO" />
+  <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="32" />
+  <!-- Borrar canciones en Android 9 y anteriores (desde la 10 se borra a través del índice). -->
+  <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" android:maxSdkVersion="28" />
+  <!-- Actualizaciones desde GitHub Releases: abrir el instalador del sistema con el APK descargado. -->
+  <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
+
+  <application>
+    <provider
+      android:name="expo.modules.impalalibrary.ImpalaUpdateFileProvider"
+      android:authorities="${applicationId}.impala.updates"
+      android:exported="false"
+      android:grantUriPermissions="true">
+      <meta-data android:name="android.support.FILE_PROVIDER_PATHS" android:resource="@xml/impala_update_paths" />
+    </provider>
+  </application>
+</manifest>

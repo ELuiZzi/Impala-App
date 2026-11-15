@@ -1,0 +1,62 @@
+# Impala — servicios del servidor
+# Se despliega en /srv/impala. La música vive en /srv/music.
+# Acceso externo solo vía `tailscale serve` (HTTPS en la tailnet); nada se expone a la LAN.
+
+services:
+  navidrome:
+    image: deluan/navidrome:0.64.2
+    container_name: impala-navidrome
+    user: "1000:1000"            # tu usuario del servidor (uid 1000)
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:4533:4533"    # solo local; tailscale serve hace de proxy HTTPS
+    environment:
+      ND_MUSICFOLDER: /music
+      ND_DATAFOLDER: /data
+      ND_LOGLEVEL: info
+      ND_DEFAULTLANGUAGE: es
+      ND_SCANNER_SCHEDULE: "@every 1h"     # respaldo; el uploader lanzará startScan
+      ND_TRANSCODINGCACHESIZE: 2GB         # CPU modesta: reutilizar transcodificaciones
+      ND_ENABLEINSIGHTSCOLLECTOR: "false"
+      ND_SUBSONIC_DEFAULTREPORTREALPATH: "true"   # el uploader necesita la ruta real para borrar canciones
+    volumes:
+      - /srv/impala/navidrome:/data
+      - /srv/music:/music:ro
+
+  uploader:
+    build: ./uploader
+    image: impala-uploader:local
+    container_name: impala-uploader
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:3000:3000"    # publicado como /upload por tailscale serve
+    # El DNS de Tailscale del servidor (100.100.100.100) solo resuelve *.ts.net y falla (SERVFAIL) con los
+    # nombres públicos: sin esto YouTube y LRCLIB fallan con "Failed to resolve"/EAI_AGAIN.
+    dns: [1.1.1.1, 9.9.9.9]
+    env_file: .env               # UPLOAD_TOKEN (generado en el servidor, no se versiona)
+    environment:
+      MUSIC_DIR: /music
+      UPLOAD_SUBDIR: Todo
+      MAX_FILE_MB: 2048
+      NAVIDROME_URL: http://navidrome:4533   # valida las credenciales Subsonic de la app
+      YTDLP_EXTRACTOR_ARGS: "youtubepot-bgutilhttp:base_url=http://bgutil-provider:4416"
+      YTDLP_COOKIES: /youtube/cookies.txt    # opcional: solo se usa si existe
+      YTDLP_ANON_COOKIES: /youtube/anon-cookies.txt   # si no hay cookies.txt: visita anónima, sin cuenta
+      YTDLP_HISTORY_FILE: /youtube/downloaded.json    # videos ya descargados → archivo (evita duplicados)
+      IMPORTS_STATE_FILE: /youtube/imports.json   # importaciones de Apple Music, para retomarlas tras un reinicio
+      LYRICS_CACHE_DIR: /youtube/lyrics           # letras ya buscadas (del archivo o de LRCLIB)
+      TRIM_BACKUP_DIR: /youtube/trim-backups      # originales de las canciones recortadas, para restaurarlas
+    volumes:
+      - /srv/music:/music        # escritura: único servicio que modifica la biblioteca
+      - /srv/impala/youtube:/youtube
+    depends_on:
+      - bgutil-provider
+
+  # Genera PO tokens para YouTube (lo consulta el plugin de yt-dlp del uploader); solo en la red interna.
+  bgutil-provider:
+    image: brainicism/bgutil-ytdlp-pot-provider:latest
+    container_name: impala-bgutil
+    restart: unless-stopped
+    init: true
+    # Mismo motivo que en el uploader (el DNS de Tailscale no resuelve nombres públicos).
+    dns: [1.1.1.1, 9.9.9.9]

@@ -17,10 +17,12 @@ import { GYM_MAX_OPTIONS, GYM_MINUTES_OPTIONS, getGymSettings, setGymSettings } 
 import { setQualityPreference, useQualityPreference, type QualityPreference } from '@/player/quality';
 import { useSource } from '@/sources';
 import { refreshLocalLibrary } from '@/sources/local';
-import { DEFAULT_FOLDER, updateLocalData, useLocalFolders } from '@/sources/localData';
+import { DEFAULT_FOLDER, DOWNLOAD_FOLDER, updateLocalData, useDownloadTarget, useLocalFolders } from '@/sources/localData';
 import ImpalaLibrary from '../../modules/impala-library';
 import ImpalaPlayer, { type GymSettings } from '../../modules/impala-player';
 import { DEVICE } from '@/components/device';
+import { askEnableSimpleMode } from '@/simple/actions';
+import { resetDiscover } from '@/discover/session';
 import { useDesktop } from '@/components/desktop/layout';
 import { setPlayerControls, usePlayerControls } from '@/player/controls';
 
@@ -113,7 +115,10 @@ export default function AjustesScreen() {
       </Group>
 
       {local ? (
-        <LocalFolders songs={version} />
+        <>
+          <LocalFolders songs={version} />
+          <DownloadFolder />
+        </>
       ) : (
         <Group
           title={source.label}
@@ -167,6 +172,27 @@ export default function AjustesScreen() {
           />
         </Group>
       )}
+
+      <Group
+        title="Modo sencillo"
+        footer="Para quien solo quiere escuchar: letra grande, botones grandes y nada escondido. Muestra las oraciones (tus suscripciones) y tus playlists fijadas. Se puede proteger la salida con un código."
+      >
+        <Pressable onPress={() => router.push('/modo-sencillo')} className="active:opacity-60 border-b border-separator ml-4">
+          <Text className="text-foreground text-base py-3">Elegir qué oraciones y playlists se ven…</Text>
+        </Pressable>
+        <Pressable onPress={askEnableSimpleMode} className="active:opacity-60">
+          <Text className="text-accent text-base ml-4 py-3">Activar el modo sencillo…</Text>
+        </Pressable>
+      </Group>
+
+      <Group
+        title="Descubrir"
+        footer="Descubrir aprende de lo que te gusta y de lo que pasas, y recuerda lo que ya te mostró para no repetirlo. Todo se guarda solo en este equipo."
+      >
+        <Pressable onPress={confirmResetDiscover} className="active:opacity-60">
+          <Text className="text-accent text-base ml-4 py-3">Reiniciar lo aprendido…</Text>
+        </Pressable>
+      </Group>
 
       <Group title="Crossfade" footer="No se aplica entre canciones del mismo álbum, para respetar los discos sin pausas.">
         {CROSSFADE_OPTIONS.map((o, i) => (
@@ -290,7 +316,7 @@ function LocalFolders({ songs }: { songs: string }) {
     queryFn: async () => {
       const counts = new Map<string, number>([[DEFAULT_FOLDER, 0]]);
       // En PC se buscan en Música y en las ya elegidas (Android las conoce todas por su índice).
-      for (const { path, count } of await (ImpalaLibrary.getFolders as (extra?: string[]) => Promise<{ path: string; count: number }[]>)(folders)) {
+      for (const { path, count } of await ImpalaLibrary.getFolders(folders)) {
         // Android/media: sonidos y audios internos de otras apps (notificaciones de Gmail, WhatsApp…).
         if (path.startsWith('Android/')) continue;
         const parts = path.split('/').filter(Boolean);
@@ -359,6 +385,105 @@ function LocalFolders({ songs }: { songs: string }) {
   );
 }
 
+/**
+ * Dónde se guardan las descargas de YouTube en modo local. En Android: memoria interna o tarjeta SD y una carpeta
+ * dentro de Música (Android solo deja guardar audio ahí). En el PC, cualquier carpeta con el selector de Windows.
+ * Si la biblioteca no lee esa carpeta, se añade a sus carpetas para que lo descargado aparezca.
+ */
+function DownloadFolder() {
+  const { folder, volume } = useDownloadTarget();
+  const [editing, setEditing] = useState(false);
+  const volumes = useQuery({ queryKey: ['local', 'volumes'], queryFn: () => ImpalaLibrary.getStorageVolumes() });
+  const musicFolders = useQuery({
+    queryKey: ['local', 'music-folders'],
+    enabled: editing,
+    queryFn: async () => {
+      const found = new Set<string>([DOWNLOAD_FOLDER]);
+      for (const { path } of await ImpalaLibrary.getFolders([])) {
+        // Solo carpetas dentro de Música (las de primer y segundo nivel bastan para elegir).
+        const parts = path.split('/').filter(Boolean);
+        if (parts[0] !== 'Music' || parts.length < 2) continue;
+        found.add(`${parts.slice(0, Math.min(parts.length, 3)).join('/')}/`);
+      }
+      return [...found].sort((a, b) => a.localeCompare(b));
+    },
+  });
+
+  const list = volumes.data ?? [];
+  const current = list.find((v) => v.id === volume) ?? list[0];
+  const missing = !!volume && volumes.isSuccess && !list.some((v) => v.id === volume);
+  const pick = (ImpalaLibrary as { pickFolder?: (title?: string) => Promise<string | null> }).pickFolder;
+
+  function choose(next: { folder?: string; volume?: string | null }) {
+    const target = { downloadFolder: next.folder ?? folder, downloadVolume: next.volume === undefined ? volume : next.volume };
+    updateLocalData((d) => ({
+      ...target,
+      // Que la biblioteca lea la carpeta nueva (si ya está dentro de una elegida, no hace falta).
+      folders: d.folders.some((f) => target.downloadFolder.toLowerCase().startsWith(f.toLowerCase())) ? d.folders : [...d.folders, target.downloadFolder],
+    }));
+    void refreshLocalLibrary();
+  }
+
+  async function pickOnPc() {
+    const path = await pick?.('Carpeta para las descargas de YouTube').catch(() => null);
+    if (path) choose({ folder: path });
+  }
+
+  const where = missing ? 'Tarjeta SD (no está)' : list.length > 1 && current ? current.label : null;
+  const value = [where, folderLabel(folder)].filter(Boolean).join(' · ');
+  const free = (bytes: number | null) => (bytes == null ? '' : ` · ${formatBytes(bytes)} libres`);
+
+  return (
+    <Group
+      title="Descargas"
+      footer={
+        missing
+          ? 'No se encuentra la tarjeta SD elegida: insértala o elige otro lugar para que las descargas no fallen.'
+          : pick
+            ? 'Lo que descargues de YouTube se guarda aquí.'
+            : 'Lo que descargues de YouTube se guarda aquí. Android solo permite guardar música dentro de la carpeta Music.'
+      }
+    >
+      <View className="ml-4 pr-4 py-2.5 border-b border-separator">
+        <Text className="text-muted text-xs">Se guardan en</Text>
+        <Text className="text-foreground text-base">{value}</Text>
+      </View>
+      {pick ? (
+        <Pressable onPress={pickOnPc} className="active:opacity-60">
+          <Text className="text-accent text-base ml-4 py-3">Cambiar carpeta…</Text>
+        </Pressable>
+      ) : (
+        <>
+          {editing &&
+            list.length > 1 &&
+            list.map((v) => (
+              <Option
+                key={v.id}
+                label={v.label}
+                detail={`${v.removable ? 'Tarjeta de memoria' : 'Almacenamiento del teléfono'}${free(v.freeBytes)}`}
+                selected={(current?.id ?? null) === v.id && !missing}
+                onPress={() => choose({ volume: v.id === 'external_primary' ? null : v.id })}
+              />
+            ))}
+          {editing &&
+            (musicFolders.data ?? [DOWNLOAD_FOLDER]).map((f) => (
+              <Option
+                key={f}
+                label={folderLabel(f).split('/').slice(1).join('/') || 'Music'}
+                detail={folderLabel(f)}
+                selected={f.toLowerCase() === folder.toLowerCase()}
+                onPress={() => choose({ folder: f })}
+              />
+            ))}
+          <Pressable onPress={() => setEditing(!editing)} className="active:opacity-60">
+            <Text className="text-accent text-base ml-4 py-3">{editing ? 'Listo' : 'Cambiar…'}</Text>
+          </Pressable>
+        </>
+      )}
+    </Group>
+  );
+}
+
 /** Solo en la app de PC: qué hace el botón de cerrar la ventana (lo guarda la parte en Rust, desktop.rs). */
 function WindowSettings() {
   const accent = useThemeColor('accent');
@@ -382,6 +507,17 @@ function WindowSettings() {
         />
       </View>
     </Group>
+  );
+}
+
+function confirmResetDiscover() {
+  Alert.alert(
+    'Reiniciar Descubrir',
+    'Se olvidan tus «me gusta» de Descubrir, los artistas que pasas y lo que ya te mostró. Tus favoritas y tu biblioteca no cambian.',
+    [
+      { text: 'Cancelar', style: 'cancel' },
+      { text: 'Reiniciar', style: 'destructive', onPress: resetDiscover },
+    ],
   );
 }
 

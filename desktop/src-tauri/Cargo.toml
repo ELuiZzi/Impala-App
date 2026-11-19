@@ -1,6 +1,6 @@
 [package]
 name = "impala-desktop"
-version = "1.6.3"
+version = "1.7.0"
 description = "Impala para PC"
 edition = "2021"
 

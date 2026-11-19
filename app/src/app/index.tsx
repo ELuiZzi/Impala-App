@@ -1,5 +1,6 @@
 import { Redirect } from 'expo-router';
 import { useAuth } from '@/auth/session';
+import { useSimpleMode } from '@/simple/store';
 import { useAudioPermission } from '@/sources/permission';
 
 /**
@@ -11,5 +12,6 @@ export default function Index() {
   const { session, mode } = useAuth();
   const permission = useAudioPermission();
   const ready = mode === 'local' ? permission === 'granted' : !!session;
-  return <Redirect href={ready ? '/biblioteca' : '/permiso'} />;
+  const simple = useSimpleMode().enabled;
+  return <Redirect href={!ready ? '/permiso' : simple ? '/sencillo' : '/biblioteca'} />;
 }

@@ -11,6 +11,7 @@ import { ErrorState, Loading } from '@/components/states';
 import { formatTotalDuration, songCount, useThemeColor } from '@/components/theme';
 import { albumKind, ResultRow } from '@/components/YoutubeResults';
 import { stopPreview } from '@/player/preview';
+import { PREVIEW_BAR_HEIGHT, PreviewBar, usePreviewBarVisible } from '@/components/player/PreviewBar';
 import { Marquee } from '@/components/Marquee';
 
 const StyledImage = withUniwind(Image);
@@ -27,6 +28,7 @@ export default function YoutubeAlbumScreen() {
   // al instante mientras llegan las pistas.
   const { id, title, artist, thumbnail, kind } = useLocalSearchParams<{ id: string; title?: string; artist?: string; thumbnail?: string; kind?: string }>();
   const insets = useSafeAreaInsets();
+  const previewing = usePreviewBarVisible();
   const accent = useThemeColor('accent');
   const album = useYoutubeAlbum(id);
   const { jobs, startAlbum, cancel } = useYoutubeDownloads();
@@ -97,6 +99,7 @@ export default function YoutubeAlbumScreen() {
     : 'Añadir a la biblioteca';
 
   return (
+    <View className="flex-1 bg-background">
     <FlatList
       className="bg-background"
       data={a.tracks}
@@ -126,7 +129,7 @@ export default function YoutubeAlbumScreen() {
         </View>
       }
       ListFooterComponent={
-        <Text style={{ paddingBottom: insets.bottom + 32 }} className="text-muted text-sm px-5 pt-4">
+        <Text style={{ paddingBottom: insets.bottom + 32 + (previewing ? PREVIEW_BAR_HEIGHT : 0) }} className="text-muted text-sm px-5 pt-4">
           {[songCount(a.tracks.length), formatTotalDuration(total)].filter(Boolean).join(', ')}
         </Text>
       }
@@ -134,6 +137,8 @@ export default function YoutubeAlbumScreen() {
         <ResultRow result={item} job={jobByVideo.get(item.id)} onDownload={() => startAlbum(a, [item])} onCancel={(id) => cancel([id])} />
       )}
     />
+    <PreviewBar bottom={Math.max(insets.bottom, 14) + 8} />
+    </View>
   );
 }
 

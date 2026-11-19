@@ -58,7 +58,7 @@ const haptic = (type: Haptics.AndroidHaptics) => void Haptics.performAndroidHapt
 type Pinned = { pin: string; playlist: Playlist };
 
 /** Reproduce una playlist sin abrirla: en el orden que el usuario guardó para ella o en aleatorio. */
-async function playPinned(source: MusicSource, playlist: Playlist, shuffle: boolean) {
+export async function playPinned(source: MusicSource, playlist: Playlist, shuffle: boolean) {
   try {
     const full = await queryClient.fetchQuery({
       queryKey: sourceKey(source, 'playlist', playlist.id),

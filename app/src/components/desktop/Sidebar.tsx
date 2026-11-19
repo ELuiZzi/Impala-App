@@ -14,7 +14,7 @@ type IconName = keyof typeof Ionicons.glyphMap;
 type BottomTabBarProps = Parameters<NonNullable<ComponentProps<typeof Tabs>['tabBar']>>[0];
 
 /**
- * Barra lateral del PC (sustituye a las pestañas de abajo): Biblioteca y Buscar, los apartados de la
+ * Barra lateral del PC (sustituye a las pestañas de abajo): Biblioteca, Descubrir y Buscar, los apartados de la
  * biblioteca, las playlists y Ajustes. Lo activo se resalta según la ruta.
  */
 export function Sidebar({ state, navigation }: BottomTabBarProps) {
@@ -37,6 +37,7 @@ export function Sidebar({ state, navigation }: BottomTabBarProps) {
       </View>
       <ScrollView contentContainerStyle={{ paddingBottom: 16 }}>
         <Item icon="albums" label="Biblioteca" active={pathname === '/biblioteca'} onPress={() => goTab('biblioteca')} />
+        <Item icon="sparkles" label="Descubrir" active={pathname === '/descubrir'} onPress={() => (tab === 'descubrir' ? undefined : navigation.navigate('descubrir'))} />
         <Item icon="search" label="Buscar" active={pathname.startsWith('/buscar')} onPress={() => goTab('buscar')} />
 
         <Section title="Tu música" />
@@ -44,6 +45,7 @@ export function Sidebar({ state, navigation }: BottomTabBarProps) {
         <Item icon="mic" label="Artistas" active={pathname.startsWith('/biblioteca/artista')} onPress={() => go('/biblioteca/artistas')} />
         <Item icon="disc" label="Álbumes" active={pathname.startsWith('/biblioteca/album')} onPress={() => go('/biblioteca/albumes')} />
         <Item icon="musical-note" label="Canciones" active={pathname === '/biblioteca/canciones'} onPress={() => go('/biblioteca/canciones')} />
+        <Item icon="radio" label="Suscripciones" active={pathname.startsWith('/biblioteca/suscripciones')} onPress={() => go('/biblioteca/suscripciones')} />
         {source.capabilities.offlineDownloads && (
           <Item icon="arrow-down-circle" label="Descargadas" active={pathname === '/biblioteca/descargadas'} onPress={() => go('/biblioteca/descargadas')} />
         )}

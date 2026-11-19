@@ -12,7 +12,7 @@ export type SheetOption = {
 
 /** Una sola hoja visible a la vez; Sheets.tsx la dibuja sobre toda la app. */
 export type SheetState =
-  | { kind: 'actions'; title: string; subtitle?: string; coverArt?: string; thumbnail?: string; options: SheetOption[] }
+  | { kind: 'actions'; title: string; subtitle?: string; coverArt?: string; thumbnail?: string; icon?: keyof typeof Ionicons.glyphMap; options: SheetOption[] }
   | {
       kind: 'playlistPicker';
       songs: Song[];
@@ -47,6 +47,10 @@ export type SheetState =
       placeholder?: string;
       initialValue?: string;
       confirmLabel: string;
+      /** Para pedir un código: teclado de números, texto oculto y largo máximo. */
+      numeric?: boolean;
+      secure?: boolean;
+      maxLength?: number;
       onSubmit: (text: string) => void | Promise<void>;
     };
 
@@ -60,6 +64,8 @@ function setSheet(sheet: SheetState | null) {
 
 export const showSheet = (sheet: SheetState) => setSheet(sheet);
 export const closeSheet = () => setSheet(null);
+/** ¿Hay una hoja abierta? (fuera de React: p. ej. para que la rueda del ratón no actúe detrás de ella) */
+export const isSheetOpen = () => current !== null;
 
 export function useSheet(): SheetState | null {
   return useSyncExternalStore(

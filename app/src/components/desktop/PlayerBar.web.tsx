@@ -11,6 +11,7 @@ import { useMaybeSource } from '@/sources';
 import { PLAYER_BAR_HEIGHT, useDesktop } from './layout';
 import { setVolume, toggleMute, useVolume } from './volume';
 import { Marquee } from '@/components/Marquee';
+import { simpleMode } from '@/simple/store';
 
 /**
  * Barra de reproducción del PC, siempre abajo (como en Spotify o Apple Music para escritorio): la canción
@@ -28,13 +29,15 @@ export function PlayerBar() {
   const error = usePlayer((s) => s.error);
 
   if (!desktop || !song || !source) return null;
-  const onPlayer = pathname === '/reproduciendo';
+  // En el modo sencillo, su propio reproductor.
+  const playerPath = simpleMode().enabled ? '/sencillo/reproduciendo' : '/reproduciendo';
+  const onPlayer = pathname === playerPath;
 
   return (
     <View style={{ height: PLAYER_BAR_HEIGHT }} className="flex-row items-center px-4 gap-4 bg-card border-t border-separator">
       {/* La canción */}
       <View className="flex-row items-center gap-3" style={{ width: '28%', minWidth: 220 }}>
-        <Pressable onPress={() => (onPlayer ? router.back() : router.push('/reproduciendo'))} className="active:opacity-70" accessibilityLabel="Reproduciendo">
+        <Pressable onPress={() => (onPlayer ? router.back() : router.push(playerPath))} className="active:opacity-70" accessibilityLabel="Reproduciendo">
           <Artwork coverArt={song.coverArt} size={120} className="w-14 h-14 rounded-md" />
         </Pressable>
         <View className="flex-1">
@@ -52,7 +55,7 @@ export function PlayerBar() {
 
       {/* Letra, cola, menú y volumen */}
       <View className="flex-row items-center justify-end gap-1" style={{ width: '28%', minWidth: 220 }}>
-        <IconButton icon="chatbox-ellipses-outline" color={onPlayer ? accent : muted} label="Letra" onPress={() => (onPlayer ? router.back() : router.push('/reproduciendo'))} />
+        <IconButton icon="chatbox-ellipses-outline" color={onPlayer ? accent : muted} label="Letra" onPress={() => (onPlayer ? router.back() : router.push(playerPath))} />
         <IconButton icon="list" color={pathname === '/cola' ? accent : muted} label="A continuación" onPress={() => (pathname === '/cola' ? router.back() : router.push('/cola'))} />
         <IconButton icon="ellipsis-horizontal" color={muted} label="Más opciones" onPress={() => openPlayerActions(source, song)} />
         <Volume color={foreground} muted={muted} accent={accent} />

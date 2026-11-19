@@ -23,7 +23,7 @@ import { isDownloaded, localCoverUri, useOffline } from '@/offline/store';
 import { describeGymRamp, stopGymRamp, useGymRamp } from '@/player/gym';
 import { isSleepTimerActive, useSleepRemaining, useSleepTimer } from '@/player/sleep';
 import { isNormal, tuningLabel, useTuning } from '@/player/tuning';
-import { currentSong, cycleRepeat, hasNextTrack, next, previous, previousTrack, seekTo, togglePlay, toggleShuffle, usePlayer } from '@/player/store';
+import { currentSong, cycleRepeat, hasNextTrack, isEpisodeId, next, playerState, previous, previousTrack, seekTo, togglePlay, toggleShuffle, usePlayer } from '@/player/store';
 import { markGestureHintSeen, setPlayerControls, shouldShowGestureHint, usePlayerControls } from '@/player/controls';
 import { FeedFeedback, useFeedGestures } from '@/components/player/useFeedGestures';
 import { GestureHint } from '@/components/player/GestureHint';
@@ -188,7 +188,7 @@ export default function ReproduciendoScreen() {
     },
     extra: gestureMode ? [artDismissPan] : [],
     onDoubleTap: () => {
-      if (song && !favorite) setFavorite(source, song, true).catch(() => {});
+      if (song && !favorite && !isEpisodeId(song.id)) setFavorite(source, song, true).catch(() => {});
     },
     onLongPress: openModes,
   });
@@ -215,6 +215,10 @@ export default function ReproduciendoScreen() {
   // Las descargas son siempre el archivo original y suenan desde el teléfono.
   const label = downloaded && base ? { icon: 'arrow-down-circle' as const, text: `Descargada · ${base.text}` } : base;
   const subtitle = [artistName(song.artist), albumName(song.album)].filter(Boolean).join(' — ');
+  // Episodio de una suscripción: sin favorita, menú de canción ni letra; retroceder/adelantar en vez de anterior/siguiente.
+  const episode = isEpisodeId(song.id);
+  const lyricsOn = source.capabilities.lyrics && !episode;
+  const jump = (deltaMs: number) => seekTo(Math.max(0, Math.min(playerState().positionMs + deltaMs, (durationMs || Infinity) - 1000)));
   // La carátula pequeña basta para sacar sus colores; si está descargada, la del teléfono.
   const artworkUrl = (downloaded ? localCoverUri(song.coverArt) : null) ?? source.coverUrl(song.coverArt, 200);
 
@@ -228,22 +232,26 @@ export default function ReproduciendoScreen() {
           <Marquee className="text-white text-[22px] font-bold">{song.title}</Marquee>
           <Marquee className="text-white/65 text-[19px]">{subtitle}</Marquee>
         </Reanimated.View>
-        <Pressable
-          onPress={() => toggleFavorite(source, song).catch(() => {})}
-          hitSlop={12}
-          className="ml-3 w-9 h-9 rounded-full bg-white/15 items-center justify-center active:opacity-50"
-          accessibilityLabel={favorite ? 'Quitar de favoritas' : 'Marcar como favorita'}
-        >
-          <Ionicons name={favorite ? 'star' : 'star-outline'} size={19} color="white" />
-        </Pressable>
-        <Pressable
-          onPress={() => openPlayerActions(source, song)}
-          hitSlop={12}
-          className="ml-3 w-9 h-9 rounded-full bg-white/15 items-center justify-center active:opacity-50"
-          accessibilityLabel="Más opciones"
-        >
-          <Ionicons name="ellipsis-horizontal" size={19} color="white" />
-        </Pressable>
+        {!episode && (
+          <>
+            <Pressable
+              onPress={() => toggleFavorite(source, song).catch(() => {})}
+              hitSlop={12}
+              className="ml-3 w-9 h-9 rounded-full bg-white/15 items-center justify-center active:opacity-50"
+              accessibilityLabel={favorite ? 'Quitar de favoritas' : 'Marcar como favorita'}
+            >
+              <Ionicons name={favorite ? 'star' : 'star-outline'} size={19} color="white" />
+            </Pressable>
+            <Pressable
+              onPress={() => openPlayerActions(source, song)}
+              hitSlop={12}
+              className="ml-3 w-9 h-9 rounded-full bg-white/15 items-center justify-center active:opacity-50"
+              accessibilityLabel="Más opciones"
+            >
+              <Ionicons name="ellipsis-horizontal" size={19} color="white" />
+            </Pressable>
+          </>
+        )}
       </View>
 
       <Scrubber positionMs={positionMs} bufferedMs={bufferedMs} durationMs={durationMs || null} onSeek={seekTo} />
@@ -261,8 +269,8 @@ export default function ReproduciendoScreen() {
 
       {/* Aleatorio y repetición justo encima de los controles; resaltados cuando están activos. Para cerrar se desliza hacia abajo.
           Con gestos no hay ninguno de los dos: se maneja tocando y deslizando la carátula. */}
-      {gestureMode ? <View className="h-4" /> : (<>
-      <View className="flex-row items-center justify-between mt-3">
+      {gestureMode && !episode ? <View className="h-4" /> : (<>
+      {!episode && <View className="flex-row items-center justify-between mt-3">
         <ModeButton icon="shuffle" active={shuffle} onPress={toggleShuffle} label={shuffle ? 'Desactivar aleatorio' : 'Activar aleatorio'} />
         <ModeButton
           icon="repeat"
@@ -271,12 +279,16 @@ export default function ReproduciendoScreen() {
           onPress={cycleRepeat}
           label={repeatMode === 'off' ? 'Repetir todo' : repeatMode === 'all' ? 'Repetir una' : 'No repetir'}
         />
-      </View>
+      </View>}
 
       <View className="flex-row items-center justify-around mt-1 mb-6">
-        <Pressable onPress={previous} hitSlop={12} className="active:opacity-50">
-          <Ionicons name="play-back" size={44} color="white" />
-        </Pressable>
+        {episode ? (
+          <JumpButton seconds={-15} onPress={() => jump(-15_000)} />
+        ) : (
+          <Pressable onPress={previous} hitSlop={12} className="active:opacity-50">
+            <Ionicons name="play-back" size={44} color="white" />
+          </Pressable>
+        )}
         <Pressable onPress={togglePlay} hitSlop={12} className="w-20 h-20 items-center justify-center active:opacity-50">
           {buffering && wantsToPlay ? (
             <ActivityIndicator size="large" color="white" />
@@ -284,9 +296,13 @@ export default function ReproduciendoScreen() {
             <Ionicons name={wantsToPlay ? 'pause' : 'play'} size={64} color="white" />
           )}
         </Pressable>
-        <Pressable onPress={next} hitSlop={12} className="active:opacity-50">
-          <Ionicons name="play-forward" size={44} color="white" />
-        </Pressable>
+        {episode ? (
+          <JumpButton seconds={30} onPress={() => jump(30_000)} />
+        ) : (
+          <Pressable onPress={next} hitSlop={12} className="active:opacity-50">
+            <Ionicons name="play-forward" size={44} color="white" />
+          </Pressable>
+        )}
       </View>
       </>)}
 
@@ -295,8 +311,8 @@ export default function ReproduciendoScreen() {
         <TuningIndicator song={song} />
         <GymIndicator />
         {/* En el PC la letra está siempre a la derecha: no hace falta el botón. */}
-        {source.capabilities.lyrics && !desktop && <LyricsButton mode={lyricsMode} onPress={cycleLyrics} />}
-        {desktop && source.capabilities.lyrics && (
+        {lyricsOn && !desktop && <LyricsButton mode={lyricsMode} onPress={cycleLyrics} />}
+        {desktop && lyricsOn && (
           <Pressable
             onPress={() => setLyricsMode('full')}
             hitSlop={12}
@@ -339,7 +355,7 @@ export default function ReproduciendoScreen() {
             </View>
             {controls}
           </View>
-          {source.capabilities.lyrics && <View className="flex-1 py-4">{lyricsView}</View>}
+          {lyricsOn && <View className="flex-1 py-4">{lyricsView}</View>}
         </View>
       </View>
     );
@@ -571,6 +587,16 @@ function ModePill({ icon, active, badge, text, onPress, label }: {
         </View>
         <Text className={`text-[15px] font-semibold ${active ? 'text-black' : 'text-white'}`}>{text}</Text>
       </View>
+    </Pressable>
+  );
+}
+
+/** Retroceder o adelantar unos segundos (episodios): la flecha circular con los segundos dentro. */
+function JumpButton({ seconds, onPress }: { seconds: number; onPress: () => void }) {
+  return (
+    <Pressable onPress={onPress} hitSlop={12} className="w-14 h-14 items-center justify-center active:opacity-50" accessibilityLabel={seconds < 0 ? `Retroceder ${-seconds} segundos` : `Adelantar ${seconds} segundos`}>
+      <Ionicons name={seconds < 0 ? 'refresh' : 'reload'} size={48} color="white" style={seconds < 0 ? { transform: [{ scaleX: -1 }] } : undefined} />
+      <Text className="absolute text-white text-[11px] font-bold">{Math.abs(seconds)}</Text>
     </Pressable>
   );
 }

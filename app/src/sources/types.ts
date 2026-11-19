@@ -26,6 +26,11 @@ export type Song = {
   starred?: string;
   /** Fecha ISO en que entró en la biblioteca. */
   created?: string;
+  /**
+   * Pistas que no son de la biblioteca (episodios de suscripciones): se reproducen desde este enlace y
+   * `coverArt` es directamente la URL de la imagen.
+   */
+  streamUrl?: string;
 };
 
 export type Album = {

@@ -3,7 +3,7 @@
     "name": "Impala",
     "slug": "impala",
     "scheme": "impala",
-    "version": "1.6.3",
+    "version": "1.7.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "automatic",
@@ -16,7 +16,7 @@
         "monochromeImage": "./assets/android-icon-monochrome.png"
       },
       "predictiveBackGestureEnabled": false,
-      "versionCode": 11
+      "versionCode": 12
     },
     "plugins": [
       "expo-router",
@@ -30,6 +30,7 @@
         }
       ],
       "./plugins/withoutFontWeightAdjustment",
+      "./plugins/withCleartextTraffic",
       [
         "expo-splash-screen",
         {
@@ -50,12 +51,27 @@
               {
                 "fontFamily": "Montserrat",
                 "fontDefinitions": [
-                  { "path": "./node_modules/@expo-google-fonts/montserrat/500Medium/Montserrat_500Medium.ttf", "weight": 500 },
-                  { "path": "./node_modules/@expo-google-fonts/montserrat/700Bold/Montserrat_700Bold.ttf", "weight": 700 }
+                  {
+                    "path": "./node_modules/@expo-google-fonts/montserrat/500Medium/Montserrat_500Medium.ttf",
+                    "weight": 500
+                  },
+                  {
+                    "path": "./node_modules/@expo-google-fonts/montserrat/700Bold/Montserrat_700Bold.ttf",
+                    "weight": 700
+                  }
                 ]
               }
             ]
           }
+        }
+      ],
+      "expo-background-task",
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/android-icon-monochrome.png",
+          "color": "#fa2d48",
+          "defaultChannel": "suscripciones"
         }
       ]
     ],

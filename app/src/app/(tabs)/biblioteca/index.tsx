@@ -43,6 +43,7 @@ export default function BibliotecaScreen() {
         <NavRow icon="mic" label="Artistas" onPress={() => router.push('/biblioteca/artistas')} />
         <NavRow icon="disc" label="Álbumes" onPress={() => router.push('/biblioteca/albumes')} />
         <NavRow icon="musical-note" label="Canciones" onPress={() => router.push('/biblioteca/canciones')} />
+        <NavRow icon="radio" label="Suscripciones" onPress={() => router.push('/biblioteca/suscripciones')} />
         {/* Con la música del teléfono todo está ya en él: no hay nada que descargar. */}
         {capabilities.offlineDownloads && (
           <NavRow icon="arrow-down-circle" label="Descargadas" onPress={() => router.push('/biblioteca/descargadas')} />

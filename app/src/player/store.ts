@@ -63,6 +63,10 @@ const subscribe = (l: () => void) => {
   return () => void listeners.delete(l);
 };
 
+/** Para seguir el reproductor fuera de React (p. ej. el progreso de los episodios). */
+export const subscribePlayer = subscribe;
+export const playerState = (): PlayerSnapshot => state;
+
 /** El selector debe devolver primitivos o referencias estables (p. ej. un Song de la cola). */
 export function usePlayer<T>(selector: (s: PlayerSnapshot) => T): T {
   return useSyncExternalStore(subscribe, () => selector(state));
@@ -95,9 +99,12 @@ function applyNative(e: StateEvent) {
   });
 }
 
+/** Episodios de suscripciones: no son de la biblioteca (ni escuchas ni scrobbles). */
+export const isEpisodeId = (id: string | null | undefined) => !!id?.startsWith('ep:');
+
 /** Last.fm/Navidrome: cuenta como escuchada a partir de la mitad o de 4 minutos. */
 function maybeScrobble(song: Song | undefined) {
-  if (!source || !song) return;
+  if (!source || !song || isEpisodeId(song.id)) return;
   const durationMs = (song.duration ?? 0) * 1000;
   const threshold = Math.min(durationMs / 2, 4 * 60 * 1000);
   if (durationMs > 0 && listenedMs >= threshold) {
@@ -122,7 +129,7 @@ export async function initPlayer(s: MusicSource) {
         if (previous && previous.id !== e.trackId) maybeScrobble(previous);
         listenedMs = 0;
         set({ index: e.index, error: null });
-        if (source && e.trackId) source.scrobble(e.trackId, false).catch(() => {});
+        if (source && e.trackId && !isEpisodeId(e.trackId)) source.scrobble(e.trackId, false).catch(() => {});
       }),
       ImpalaPlayer.addListener('onError', (e) => set({ error: describeError(e.code, e.message) })),
       // Botón de aleatorio de la notificación: lo mismo que el de la app.
@@ -176,8 +183,9 @@ function describeError(code: string, message: string): string {
 function toNativeTrack(s: MusicSource, song: Song, quality: StreamQuality) {
   return {
     id: song.id,
-    // Si está descargada se reproduce el archivo local: sin datos y sin depender del servidor.
-    url: (s.capabilities.offlineDownloads ? localSongUri(song.id) : null) ?? s.streamUrl(song.id, quality),
+    // Si está descargada se reproduce el archivo local: sin datos y sin depender del servidor. Los episodios
+    // traen su propio enlace.
+    url: song.streamUrl ?? (s.capabilities.offlineDownloads ? localSongUri(song.id) : null) ?? s.streamUrl(song.id, quality),
     title: song.title,
     // La notificación y la pantalla de bloqueo muestran esto tal cual: sin marcadores de Navidrome.
     artist: artistName(song.artist),
@@ -203,14 +211,14 @@ function shuffled<T>(items: T[]): T[] {
  * aleatorio; sin indicarlo se respeta el modo actual: si está activo, suena primero la elegida y
  * el resto se mezcla (como Apple Music).
  */
-export async function playSongs(songs: Song[], startIndex: number, opts: { shuffle?: boolean } = {}) {
+export async function playSongs(songs: Song[], startIndex: number, opts: { shuffle?: boolean; startPositionMs?: number } = {}) {
   if (!source || songs.length === 0) return;
   const s = source;
   cancelPreview();
   let candidates = songs;
   let chosen = startIndex;
   // Sin conexión solo pueden sonar las descargadas: se omiten las demás (la música del teléfono suena siempre).
-  if (s.capabilities.offlineDownloads && !ImpalaPlayer.getNetworkInfo().connected) {
+  if (s.capabilities.offlineDownloads && !songs[startIndex]?.streamUrl && !ImpalaPlayer.getNetworkInfo().connected) {
     const target = songs[startIndex];
     candidates = songs.filter((song) => isDownloaded(song.id));
     if (candidates.length === 0) {
@@ -232,8 +240,9 @@ export async function playSongs(songs: Song[], startIndex: number, opts: { shuff
   }
   const quality = await qualityFor(s);
   listenedMs = 0;
-  set({ queue, index: start, shuffle, quality, error: null, positionMs: 0, playWhenReady: true });
-  await ImpalaPlayer.setQueue(queue.map((song) => toNativeTrack(s, song, quality)), start, 0);
+  const startMs = opts.startPositionMs ?? 0;
+  set({ queue, index: start, shuffle, quality, error: null, positionMs: startMs, playWhenReady: true });
+  await ImpalaPlayer.setQueue(queue.map((song) => toNativeTrack(s, song, quality)), start, startMs);
   void syncShuffleButton();
 }
 

@@ -61,9 +61,11 @@ export class SubsonicSource implements MusicSource {
 
   streamUrl = (songId: string, quality: StreamQuality) => streamUrl(this.session, songId, quality);
   downloadUrl = (songId: string) => buildUrl(this.session, 'download', { id: songId });
-  coverUrl = (coverArt: string | undefined, size: number) => coverArtUrl(this.session, coverArt, size);
+  // Una URL completa (imagen de un episodio de una suscripción) se usa tal cual.
+  coverUrl = (coverArt: string | undefined, size: number) => (coverArt && /^https?:\/\//.test(coverArt) ? coverArt : coverArtUrl(this.session, coverArt, size));
   /** URL.searchParams no está completo en React Native; basta con extraer el parámetro id. */
   coverArtFromUrl = (url: string | undefined) => {
+    if (url && !url.includes('/rest/getCoverArt')) return /^https?:\/\//.test(url) ? url : undefined;
     const match = url && /[?&]id=([^&]+)/.exec(url);
     return match ? decodeURIComponent(match[1]) : undefined;
   };

@@ -2,7 +2,7 @@ import { getArtworkColors } from './web/colors';
 import * as engine from './web/engine';
 import { addListener, removeAllListeners } from './web/events';
 import { clearSongTuning, prefs, saveTuning, tuningFor, updatePrefs } from './web/prefs';
-import { startPreview, startPreviewClips, stopPreview } from './web/preview';
+import { seekPreview, setPreviewPlaying, startPreview, startPreviewClips, stopPreview } from './web/preview';
 
 // Con nombre y no `export type *`: el resolvedor de ESLint puede llevar './index' a este mismo archivo y el
 // `export *` se apuntaría a sí mismo (bucle infinito en eslint-plugin-import).
@@ -79,6 +79,8 @@ const ImpalaPlayer = {
   getArtworkColors,
   startPreview,
   startPreviewClips,
+  setPreviewPlaying,
+  seekPreview,
   stopPreview,
 
   // En PC se usa el cliente de Tailscale de Windows: Impala no lo enciende ni lo apaga.

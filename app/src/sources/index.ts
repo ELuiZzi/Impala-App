@@ -36,9 +36,11 @@ export function useServerSession(): Session {
 
 /** Igual, pero null si la fuente activa no es un servidor: las consultas que lo necesitan se desactivan. */
 export function useMaybeServerSession(): Session | null {
-  const source = useSource();
-  return source instanceof SubsonicSource ? source.session : null;
+  return maybeServerSession(useSource());
 }
+
+/** La sesión del servidor de una fuente, o null si es la música del equipo (sin lanzar error). */
+export const maybeServerSession = (source: MusicSource): Session | null => (source instanceof SubsonicSource ? source.session : null);
 
 /** Clave de React Query de una fuente: [...source.key, ...partes]. */
 export const sourceKey = (source: MusicSource, ...parts: unknown[]) => [...source.key, ...parts];

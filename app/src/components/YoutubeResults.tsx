@@ -198,7 +198,13 @@ export function ResultRow({ result, job, onDownload, onCancel }: { result: Youtu
     }
   }
 
-  const listen = () => togglePreview(result.id, youtubePreviewSource(session, result.id), mainPlaying);
+  const listen = () =>
+    togglePreview(result.id, youtubePreviewSource(session, result.id), mainPlaying, {
+      title: result.title,
+      subtitle: result.artist ?? result.channel ?? undefined,
+      thumbnail: result.thumbnail,
+      onDownload: job?.status === 'done' ? undefined : download,
+    });
   const more = () => openYoutubeActions(source, result);
 
   // Tocar el indicador de una descarga en curso permite cancelarla.
@@ -234,6 +240,8 @@ export function ResultRow({ result, job, onDownload, onCancel }: { result: Youtu
             <ActivityIndicator size="small" color="white" />
           ) : preview === 'playing' ? (
             <Ionicons name="stop" size={20} color="white" />
+          ) : preview === 'paused' ? (
+            <Ionicons name="play" size={20} color="white" />
           ) : null}
         </View>
       </View>
@@ -250,7 +258,7 @@ export function ResultRow({ result, job, onDownload, onCancel }: { result: Youtu
             )}
           </View>
           <ListMarquee className={`text-sm ${job?.status === 'error' || preview === 'error' ? 'text-accent' : 'text-muted'}`}>{detail}</ListMarquee>
-          {preview === 'playing' && (
+          {(preview === 'playing' || preview === 'paused') && (
             <View className="h-0.5 mt-1 rounded-full bg-separator overflow-hidden">
               <View style={{ width: `${Math.round(progress * 100)}%` }} className="h-full bg-accent" />
             </View>

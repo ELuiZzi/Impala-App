@@ -343,8 +343,10 @@ export class LocalSource implements MusicSource {
 
   streamUrl = (songId: string) => SONG_URI + songId;
   downloadUrl = (songId: string) => SONG_URI + songId;
-  coverUrl = (coverArt: string | undefined) => (coverArt ? ALBUM_ART_URI + coverArt : undefined);
-  coverArtFromUrl = (url: string | undefined) => (url?.startsWith(ALBUM_ART_URI) ? url.slice(ALBUM_ART_URI.length) : undefined);
+  // Una URL completa (imagen de un episodio de una suscripción) se usa tal cual.
+  coverUrl = (coverArt: string | undefined) => (coverArt ? (/^https?:\/\//.test(coverArt) ? coverArt : ALBUM_ART_URI + coverArt) : undefined);
+  coverArtFromUrl = (url: string | undefined) =>
+    url?.startsWith(ALBUM_ART_URI) ? url.slice(ALBUM_ART_URI.length) : url && /^https?:\/\//.test(url) ? url : undefined;
 
   /** Android pide confirmación con su propio diálogo; si se cancela, DeleteCancelledError. */
   deleteSong = async (id: string) => {

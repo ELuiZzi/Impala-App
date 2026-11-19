@@ -12,6 +12,7 @@ import android.os.Bundle
 import android.os.Environment
 import android.os.Handler
 import android.os.Looper
+import android.os.storage.StorageManager
 import android.provider.MediaStore
 import expo.modules.kotlin.Promise
 import expo.modules.kotlin.exception.CodedException
@@ -108,7 +109,11 @@ class ImpalaLibraryModule : Module() {
     AsyncFunction("getSongs") { folders: List<String> -> querySongs(folders) }
 
     /** Todas las carpetas que contienen audio, con cuántas canciones hay directamente en cada una. */
-    AsyncFunction("getFolders") { queryFolders() }
+    // `extra` es para el PC (carpetas fuera de Música); Android ya conoce todas por su índice.
+    AsyncFunction("getFolders") { _: List<String>? -> queryFolders() }
+
+    /** Dónde se puede guardar música: la memoria interna y, si hay, la tarjeta SD (montadas). */
+    AsyncFunction("getStorageVolumes") { storageVolumes() }
 
     /** El .lrc con el mismo nombre que el audio, en su carpeta; null si no hay o no se puede leer. */
     AsyncFunction("readSidecarLyrics") { id: String -> readSidecar(id.toLong()) }
@@ -215,6 +220,7 @@ class ImpalaLibraryModule : Module() {
       contentLength = (o["contentLength"] as? Number)?.toLong(),
       baseName = str("baseName") ?: error("Falta el nombre del archivo"),
       folder = str("folder") ?: "Music/Impala",
+      volume = str("volume"),
       tags = Mp4Tags(str("title"), str("artist"), str("album"), str("albumArtist"), int("track"), int("year"), null),
       coverUrls = (o["coverUrls"] as? List<*>)?.filterIsInstance<String>() ?: emptyList(),
     )
@@ -333,6 +339,29 @@ class ImpalaLibraryModule : Module() {
 
   @Suppress("DEPRECATION")
   private fun storageRoot(): File = Environment.getExternalStorageDirectory()
+
+  /**
+   * Los volúmenes de MediaStore montados: id ("external_primary", o el de la SD como "1a2b-3c4d"), nombre para
+   * mostrar y espacio libre (Android 11+). Antes de Android 10 solo la memoria interna: escribir en la SD
+   * pediría el selector de archivos del sistema.
+   */
+  private fun storageVolumes(): List<Map<String, Any?>> {
+    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
+      return listOf(mapOf("id" to MediaStore.VOLUME_EXTERNAL_PRIMARY, "label" to "Memoria interna", "removable" to false, "freeBytes" to storageRoot().usableSpace.toDouble()))
+    }
+    val storage = context.getSystemService(StorageManager::class.java)
+    return MediaStore.getExternalVolumeNames(context).mapNotNull { name ->
+      val volume = runCatching { storage.getStorageVolume(MediaStore.Audio.Media.getContentUri(name)) }.getOrNull() ?: return@mapNotNull null
+      if (volume.state != Environment.MEDIA_MOUNTED) return@mapNotNull null
+      val dir = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) volume.directory else null
+      mapOf(
+        "id" to name,
+        "label" to if (volume.isPrimary) "Memoria interna" else volume.getDescription(context),
+        "removable" to volume.isRemovable,
+        "freeBytes" to dir?.let { runCatching { it.usableSpace.toDouble() }.getOrNull() },
+      )
+    }.sortedBy { it["id"] != MediaStore.VOLUME_EXTERNAL_PRIMARY }
+  }
 
   /** Android 10+ guarda la ruta relativa; antes solo la absoluta (_data), de la que se deduce. */
   private val hasRelativePath = Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q

@@ -19,9 +19,11 @@ import androidx.media3.common.MediaMetadata
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
+import androidx.media3.datasource.DefaultDataSource
 import androidx.media3.datasource.HttpDataSource
+import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.ExoPlayer
-import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
+import androidx.media3.exoplayer.source.ProgressiveMediaSource
 import androidx.media3.exoplayer.upstream.DefaultLoadErrorHandlingPolicy
 import androidx.media3.exoplayer.upstream.LoadErrorHandlingPolicy
 import androidx.media3.session.MediaController
@@ -134,7 +136,7 @@ class ImpalaPlayerModule : Module() {
 
   private val previewListener = object : Player.Listener {
     override fun onEvents(player: Player, events: Player.Events) {
-      if (events.containsAny(Player.EVENT_IS_PLAYING_CHANGED, Player.EVENT_PLAYBACK_STATE_CHANGED)) {
+      if (events.containsAny(Player.EVENT_IS_PLAYING_CHANGED, Player.EVENT_PLAYBACK_STATE_CHANGED, Player.EVENT_POSITION_DISCONTINUITY)) {
         sendPreviewState(player)
         main.removeCallbacks(previewTicker)
         if (player.isPlaying) main.postDelayed(previewTicker, PROGRESS_INTERVAL_MS)
@@ -153,6 +155,9 @@ class ImpalaPlayerModule : Module() {
    * en vez de esperar los ~6 s de reintentos de ExoPlayer.
    */
   @OptIn(UnstableApi::class)
+  /** Trozos en que se pide el audio de una vista previa (~16 s a 128 kbps): ver ChunkedDataSource. */
+  private val PREVIEW_CHUNK_BYTES = 256L * 1024
+
   private fun newPreviewPlayer(): ExoPlayer {
     val failFastOn4xx = object : DefaultLoadErrorHandlingPolicy() {
       override fun getRetryDelayMsFor(loadErrorInfo: LoadErrorHandlingPolicy.LoadErrorInfo): Long {
@@ -161,8 +166,20 @@ class ImpalaPlayerModule : Module() {
         return super.getRetryDelayMsFor(loadErrorInfo)
       }
     }
+    // Búfer corto: una vista previa (y Descubrir, 30 s por canción) no necesita los 50 s por adelantado que
+    // descarga ExoPlayer por defecto (gastaba ~2,8 MB por canción en Descubrir); y empieza a sonar con 1 s.
+    val shortBuffer = DefaultLoadControl.Builder()
+      .setBufferDurationsMs(15_000, 25_000, 1_000, 2_000)
+      .build()
     return ExoPlayer.Builder(context)
-      .setMediaSourceFactory(DefaultMediaSourceFactory(context).setLoadErrorHandlingPolicy(failFastOn4xx))
+      .setLoadControl(shortBuffer)
+      .setMediaSourceFactory(
+        // Siempre un archivo de audio (YouTube o el servidor). Revisar el búfer cada 256 KB (por defecto, 1 MB):
+        // si no, cada canción de Descubrir leía 1 MB aunque se pasara a los 3 s.
+        ProgressiveMediaSource.Factory(ChunkedDataSource.Factory(DefaultDataSource.Factory(context), PREVIEW_CHUNK_BYTES))
+          .setContinueLoadingCheckIntervalBytes(256 * 1024)
+          .setLoadErrorHandlingPolicy(failFastOn4xx),
+      )
       .setAudioAttributes(AudioAttributes.Builder().setUsage(C.USAGE_MEDIA).setContentType(C.AUDIO_CONTENT_TYPE_MUSIC).build(), false)
       .build()
   }
@@ -176,6 +193,7 @@ class ImpalaPlayerModule : Module() {
     val state = when {
       p.playbackState == Player.STATE_ENDED -> "ended"
       p.playbackState == Player.STATE_BUFFERING || p.playbackState == Player.STATE_IDLE -> "loading"
+      !p.playWhenReady -> "paused"
       else -> "playing"
     }
     sendEvent(
@@ -248,17 +266,20 @@ class ImpalaPlayerModule : Module() {
 
     Function("getSleepTimer") { mapOf(*sleepStateOf()) }
 
-    /** Reproduce [url] como vista previa (sustituye la anterior). El JS pausa antes el reproductor principal. */
-    AsyncFunction("startPreview") { url: String ->
+    /**
+     * Reproduce [url] como vista previa (sustituye la anterior) desde [positionMs] (Descubrir empieza en el coro).
+     * El JS pausa antes el reproductor principal.
+     */
+    AsyncFunction("startPreview") { url: String, positionMs: Double ->
       val p = preview ?: newPreviewPlayer()
         .also {
           it.addListener(previewListener)
           preview = it
         }
-      p.setMediaItem(MediaItem.fromUri(url))
+      p.setMediaItem(MediaItem.fromUri(url), positionMs.toLong().coerceAtLeast(0))
       p.prepare()
       p.play()
-      sendEvent(EVENT_PREVIEW, bundleOf("state" to "loading", "positionMs" to 0.0, "durationMs" to null))
+      sendEvent(EVENT_PREVIEW, bundleOf("state" to "loading", "positionMs" to positionMs, "durationMs" to null))
     }.runOnQueue(Queues.MAIN)
 
     /**
@@ -282,6 +303,15 @@ class ImpalaPlayerModule : Module() {
       p.prepare()
       p.play()
       sendEvent(EVENT_PREVIEW, bundleOf("state" to "loading", "positionMs" to positionMs, "durationMs" to null, "itemIndex" to index))
+    }.runOnQueue(Queues.MAIN)
+
+    /** Pausa o reanuda la vista previa sin soltarla (barra de vista previa). */
+    AsyncFunction("setPreviewPlaying") { playing: Boolean ->
+      preview?.playWhenReady = playing
+    }.runOnQueue(Queues.MAIN)
+
+    AsyncFunction("seekPreview") { positionMs: Double ->
+      preview?.seekTo(positionMs.toLong().coerceAtLeast(0))
     }.runOnQueue(Queues.MAIN)
 
     AsyncFunction("stopPreview") {

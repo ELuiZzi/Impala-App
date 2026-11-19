@@ -29,6 +29,9 @@ export type DeviceSong = {
 export type DeviceFolder = { path: string; count: number };
 
 /** Una descarga de YouTube al teléfono: audio m4a ya resuelto y los datos de sus etiquetas. */
+/** Dónde se puede guardar música en Android: memoria interna o tarjeta SD. */
+export type StorageVolume = { id: string; label: string; removable: boolean; freeBytes: number | null };
+
 export type YoutubeDownloadOptions = {
   jobId: string;
   url: string;
@@ -38,6 +41,8 @@ export type YoutubeDownloadOptions = {
   baseName: string;
   /** Carpeta relativa a la raíz del almacenamiento ("Music/Impala"). */
   folder: string;
+  /** Android: volumen donde guardarla (id de getStorageVolumes); sin él, la memoria interna. */
+  volume?: string | null;
   title: string;
   artist?: string | null;
   album?: string | null;
@@ -78,7 +83,9 @@ declare class ImpalaLibraryModule extends NativeModule<Events> {
   /** Las canciones de esas carpetas ("Music/Impala/") y de sus subcarpetas. */
   getSongs(folders: string[]): Promise<DeviceSong[]>;
   /** Las carpetas que contienen audio, con cuántas canciones hay directamente en cada una. */
-  getFolders(): Promise<DeviceFolder[]>;
+  getFolders(extra?: string[]): Promise<DeviceFolder[]>;
+  /** Android: memoria interna y tarjeta SD montadas (la interna primero). */
+  getStorageVolumes(): Promise<StorageVolume[]>;
   /** Crea la carpeta (relativa a la raíz del almacenamiento) si falta. Devuelve si existe al terminar. */
   ensureFolder(relativePath: string): boolean;
   /** El .lrc con el mismo nombre que el audio, en su carpeta; null si no hay o Android no deja leerlo. */

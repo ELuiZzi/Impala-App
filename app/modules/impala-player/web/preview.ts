@@ -22,7 +22,7 @@ function state(a: HTMLAudioElement): PreviewEvent {
   const positionMs = a.currentTime * 1000 - (clip ? clip[0] : 0);
   const durationMs = clip ? clip[1] - clip[0] : Number.isFinite(a.duration) ? a.duration * 1000 : null;
   const loading = a.readyState < HTMLMediaElement.HAVE_FUTURE_DATA;
-  return { state: loading ? 'loading' : 'playing', positionMs: Math.max(0, positionMs), durationMs, itemIndex: clip ? clipIndex : 0 };
+  return { state: a.paused ? 'paused' : loading ? 'loading' : 'playing', positionMs: Math.max(0, positionMs), durationMs, itemIndex: clip ? clipIndex : 0 };
 }
 
 function release() {
@@ -73,14 +73,31 @@ function start(url: string, positionMs: number, list: [number, number][] | null 
   send({ state: 'loading', positionMs: 0, durationMs: null });
 }
 
-export async function startPreview(url: string) {
-  start(url, 0);
+export async function startPreview(url: string, positionMs = 0) {
+  start(url, Math.max(0, positionMs));
 }
 
 export async function startPreviewClips(url: string, list: [number, number][], index: number, positionMs: number) {
   if (list.length === 0) return;
   const i = Math.min(Math.max(0, index), list.length - 1);
   start(url, list[i][0] + positionMs, list, i);
+}
+
+/** Pausa o reanuda sin soltar el audio (barra de vista previa). */
+export async function setPreviewPlaying(playing: boolean) {
+  const a = audio;
+  if (!a) return;
+  if (!playing) return a.pause();
+  await a.play().catch(() => {});
+  send(state(a));
+}
+
+export async function seekPreview(positionMs: number) {
+  const a = audio;
+  if (!a) return;
+  const clip = clips?.[clipIndex];
+  a.currentTime = Math.max(0, (clip ? clip[0] : 0) + positionMs) / 1000;
+  send(state(a));
 }
 
 export async function stopPreview() {

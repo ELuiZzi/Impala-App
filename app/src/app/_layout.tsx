@@ -1,7 +1,7 @@
 import '../../global.css';
 
 import { QueryClientProvider } from '@tanstack/react-query';
-import { Stack } from 'expo-router';
+import { type Href, router, Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import * as SystemUI from 'expo-system-ui';
 import { useEffect, useRef } from 'react';
@@ -21,7 +21,11 @@ import { syncFavoritesPlaylist } from '@/library/favorites';
 import { setTailscaleEnabled, startTailscaleLifecycle } from '@/net/tailscale';
 import { loadOffline } from '@/offline/store';
 import { initPlayer, resetPlayer, syncPlayer } from '@/player/store';
-import { useMaybeSource, type MusicSource } from '@/sources';
+import { maybeServerSession, useMaybeSource, type MusicSource } from '@/sources';
+import { checkSubscriptions, scheduleBackgroundChecks, startForegroundChecks } from '@/subscriptions/background';
+import { listenNotificationTaps } from '@/subscriptions/notify';
+import { setEpisodeSession, startEpisodeTracking } from '@/subscriptions/playback';
+import { simpleMode, useSimpleMode } from '@/simple/store';
 import { watchLocalLibrary } from '@/sources/local';
 import { checkAudioPermission, useAudioPermission } from '@/sources/permission';
 
@@ -61,6 +65,8 @@ function RootStack() {
   const local = mode === 'local';
   // Con la música del teléfono, sin permiso para leerla solo se ve la pantalla que lo pide.
   const ready = local ? permission === 'granted' : !!session;
+  // Modo sencillo: solo sus pantallas (ni pestañas ni Ajustes hasta salir de él).
+  const simple = useSimpleMode().enabled;
   const previousSource = useRef<MusicSource | null>(null);
 
   // Evita destellos blancos entre transiciones en modo oscuro.
@@ -78,6 +84,10 @@ function RootStack() {
     void (async () => {
       if (previous && previous !== source) await resetPlayer();
       await initPlayer(source);
+      // Episodios de las suscripciones: guardar dónde se quedó cada uno (y el servidor, si hay, para su audio;
+      // en modo local no hay: maybeServerSession da null en vez de lanzar un error).
+      setEpisodeSession(maybeServerSession(source));
+      startEpisodeTracking();
     })();
   }, [source, isLoading]);
 
@@ -91,10 +101,32 @@ function RootStack() {
     if (local && ready) return watchLocalLibrary();
   }, [local, ready]);
 
+  // Suscripciones: revisar al abrir (y cada hora en el PC), programar la revisión en segundo plano y abrir la
+  // suscripción al tocar un aviso de episodio nuevo.
+  useEffect(() => {
+    if (!ready) return;
+    void scheduleBackgroundChecks();
+    void checkSubscriptions({ notify: false });
+    const stopChecks = startForegroundChecks();
+    // Un instante para que la navegación esté montada (si el aviso abrió la app).
+    const stopTaps = listenNotificationTaps((url) =>
+      setTimeout(() => {
+        // En el modo sencillo, la página sencilla de esa suscripción.
+        const sencillo = simpleMode().enabled ? url.replace('/biblioteca/suscripciones/', '/sencillo/') : url;
+        router.push(sencillo as Href);
+      }, 300),
+    );
+    return () => {
+      stopChecks();
+      stopTaps();
+    };
+  }, [ready]);
+
   useEffect(() => {
     const sub = AppState.addEventListener('change', (s) => {
       if (s !== 'active') return;
       syncPlayer();
+      void checkSubscriptions({ notify: false });
       // Pudo dar (o quitar) el permiso desde los ajustes de Android.
       void checkAudioPermission();
     });
@@ -106,9 +138,15 @@ function RootStack() {
   return (
     <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: background } }}>
       <Stack.Screen name="index" />
-      <Stack.Protected guard={ready}>
+      <Stack.Protected guard={ready && simple}>
+        <Stack.Screen name="sencillo/index" />
+        <Stack.Screen name="sencillo/[id]" options={{ animation: 'slide_from_right' }} />
+        <Stack.Screen name="sencillo/reproduciendo" options={{ presentation: 'modal', animation: 'slide_from_bottom' }} />
+      </Stack.Protected>
+      <Stack.Protected guard={ready && !simple}>
         <Stack.Screen name="(tabs)" />
         <Stack.Screen name="ajustes" options={{ animation: 'slide_from_right' }} />
+        <Stack.Screen name="modo-sencillo" options={{ animation: 'slide_from_right' }} />
         <Stack.Screen name="youtube-album/[id]" options={{ animation: 'slide_from_right' }} />
         <Stack.Screen name="youtube-artist/[id]" options={{ animation: 'slide_from_right' }} />
         <Stack.Screen

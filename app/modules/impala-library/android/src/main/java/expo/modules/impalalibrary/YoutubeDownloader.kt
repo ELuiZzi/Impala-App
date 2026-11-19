@@ -36,8 +36,10 @@ data class YoutubeDownload(
   val contentLength: Long?,
   /** "Artista - Título" (sin extensión). */
   val baseName: String,
-  /** Carpeta relativa a la raíz del almacenamiento ("Music/Impala"). */
+  /** Carpeta relativa a la raíz del almacenamiento ("Music/Impala"), o ruta absoluta para un archivo privado. */
   val folder: String,
+  /** Volumen de MediaStore donde se guarda (tarjeta SD…); null = memoria interna. Solo Android 10+. */
+  val volume: String?,
   val tags: Mp4Tags,
   /** Carátulas candidatas, por preferencia: se usa la primera que se pueda descargar. */
   val coverUrls: List<String>,
@@ -222,6 +224,14 @@ class YoutubeDownloader(
     val name = "${job.baseName}.m4a"
     val mime = MimeTypeMap.getSingleton().getMimeTypeFromExtension("m4a") ?: "audio/mp4"
     val resolver = context.contentResolver
+    // Ruta absoluta (episodios de suscripciones): archivo privado de la app, fuera de la biblioteca y del
+    // índice de Android; se borra sin pedir permiso cuando ya se escuchó.
+    if (job.folder.startsWith("/")) {
+      val dir = File(job.folder).apply { mkdirs() }
+      val target = File(dir, name)
+      file.copyTo(target, overwrite = true)
+      return result(Uri.fromFile(target), target.name)
+    }
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
       val values = ContentValues().apply {
         put(MediaStore.Audio.Media.DISPLAY_NAME, name)
@@ -229,7 +239,11 @@ class YoutubeDownloader(
         put(MediaStore.Audio.Media.RELATIVE_PATH, job.folder.trimEnd('/') + "/")
         put(MediaStore.Audio.Media.IS_PENDING, 1)
       }
-      val uri = resolver.insert(MediaStore.Audio.Media.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY), values)
+      val volume = job.volume ?: MediaStore.VOLUME_EXTERNAL_PRIMARY
+      if (volume !in MediaStore.getExternalVolumeNames(context)) {
+        throw Exception("La tarjeta SD no está disponible. Insértala o elige otra carpeta de descargas en Ajustes.")
+      }
+      val uri = resolver.insert(MediaStore.Audio.Media.getContentUri(volume), values)
         ?: throw Exception("Android no dejó crear el archivo")
       try {
         resolver.openOutputStream(uri)?.use { out -> file.inputStream().use { it.copyTo(out) } } ?: throw Exception("No se pudo escribir el archivo")

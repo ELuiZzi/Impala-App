@@ -439,6 +439,25 @@ app/             aplicación Android (Expo SDK 57, React Native 0.86)
   estéreo. Logcat `ImpalaTuning`: «reverberación 40 %: húmedo 0.25 seco 1.00 realimentación 0.9170 cola ~3.0 s». En el
   PC (web) la misma cantidad mueve la ganancia húmeda (0,5 × cantidad^1,5) y la seca de la convolución.
 
+### Versión 1.7
+
+- **Suscripciones** (`src/subscriptions/`): canales de YouTube (feed público `feeds/videos.xml?channel_id=`) y podcasts
+  (RSS, con ETag / If-Modified-Since), guardados en `subscriptions.json`. Los episodios suenan en el reproductor principal
+  como `Song` con `streamUrl` (id `ep:<suscripción>:<episodio>`), recuerdan la posición (cada 10 s, al pausar y al
+  cambiar; listo al 95 %) y tienen velocidad propia. En segundo plano (`expo-background-task`, cada ~3 h) se revisan los
+  feeds, se avisa (`expo-notifications`, canal «suscripciones») y se descargan los N más nuevos a una carpeta privada.
+  `plugins/withCleartextTraffic.js` permite `http://` (muchos podcasts lo usan). En el PC se revisa al abrir y cada hora.
+- **Modo sencillo** (`src/simple/`, rutas `app/sencillo/`): con `Stack.Protected`, si está activo solo existen sus
+  pantallas; salida con código opcional de 4 cifras.
+- **Descubrir** (`src/discover/`, pestaña `(tabs)/descubrir.tsx`): `engine.ts` (sin dependencias, con pruebas) mezcla las
+  radios de YouTube Music (`RDAMVM<id>`, solo pistas ATV) de varias semillas (favoritas, más escuchadas, «me gusta») y
+  1 de cada 5 de «Ánimo y géneros»; sin repetir (historial de 5000 en `discover.json`), sin lo que ya tienes ni el mismo
+  artista en 4 seguidas; aprende con me gusta / pasar antes de 5 s / escuchar entera. `bestPart.ts`: empieza en el coro
+  de la letra sincronizada de LRCLIB (la línea que vuelve en más partes de la canción) o, sin letra, en el 30 %
+  (`docs/c0-descubrir.md`: «lo más repetido» de YouTube no sirve). Suena en el reproductor de vista previa, que acepta
+  posición inicial y pide el audio por trozos (`ChunkedDataSource.kt`: YouTube manda el archivo entero al búfer del
+  socket aunque ExoPlayer deje de leer; 55 → 23 MB en 20 canciones). Filtros en `filters.ts`. Pruebas: `npm test`.
+
 ### Crossfade (Fase 7)
 
 `CrossfadeController` (en `PlaybackService`) usa un segundo ExoPlayer, el *fader*; la MediaSession sigue

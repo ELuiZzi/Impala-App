@@ -1,5 +1,5 @@
 import { useSyncExternalStore } from 'react';
-import { DOWNLOAD_FOLDER } from '@/sources/localData';
+import { localData } from '@/sources/localData';
 import { localSource, refreshLocalLibrary } from '@/sources/local';
 import type { Song } from '@/sources';
 import ImpalaLibrary from '../../modules/impala-library';
@@ -204,7 +204,8 @@ async function download(id: string, item: LocalDownloadItem) {
         userAgent: stream.userAgent,
         contentLength: stream.contentLength,
         baseName: fileName(artist, title),
-        folder: DOWNLOAD_FOLDER,
+        folder: localData().downloadFolder,
+        volume: localData().downloadVolume,
         title,
         artist,
         album: item.album ?? null,

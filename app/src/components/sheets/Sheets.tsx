@@ -195,11 +195,17 @@ function OptionRow({ option, last }: { option: SheetOption; last?: boolean }) {
   );
 }
 
-function ActionsSheet({ title, subtitle, coverArt, thumbnail, options }: Extract<NonNullable<ReturnType<typeof useSheet>>, { kind: 'actions' }>) {
+function ActionsSheet({ title, subtitle, coverArt, thumbnail, icon, options }: Extract<NonNullable<ReturnType<typeof useSheet>>, { kind: 'actions' }>) {
+  const { height } = useWindowDimensions();
+  const accent = useThemeColor('accent');
   return (
     <Panel>
       <View className="flex-row items-center px-5 pb-3 mb-1 border-b border-separator">
-        {thumbnail ? (
+        {icon ? (
+          <View className="w-12 h-12 rounded-lg bg-background items-center justify-center">
+            <Ionicons name={icon} size={24} color={accent} />
+          </View>
+        ) : thumbnail ? (
           <StyledImage source={{ uri: thumbnail }} contentFit="cover" cachePolicy="disk" className="w-12 h-12 rounded-lg bg-background" />
         ) : (
           <Artwork coverArt={coverArt} size={48} className="w-12 h-12 rounded-lg" />
@@ -209,9 +215,12 @@ function ActionsSheet({ title, subtitle, coverArt, thumbnail, options }: Extract
           {subtitle ? <Marquee className="text-muted text-sm">{subtitle}</Marquee> : null}
         </View>
       </View>
-      {options.map((o, i) => (
-        <OptionRow key={o.label} option={o} last={i === options.length - 1} />
-      ))}
+      {/* Listas largas (p. ej. los géneros de Descubrir): se desplazan. */}
+      <ScrollView style={{ maxHeight: height * 0.6 }} bounces={false}>
+        {options.map((o, i) => (
+          <OptionRow key={o.label} option={o} last={i === options.length - 1} />
+        ))}
+      </ScrollView>
     </Panel>
   );
 }
@@ -386,7 +395,7 @@ function PlaylistPicker({ songs, pending }: { songs: Song[]; pending?: { title: 
   );
 }
 
-function PromptSheet({ title, placeholder, initialValue, confirmLabel, onSubmit }: Extract<NonNullable<ReturnType<typeof useSheet>>, { kind: 'prompt' }>) {
+function PromptSheet({ title, placeholder, initialValue, confirmLabel, numeric, secure, maxLength, onSubmit }: Extract<NonNullable<ReturnType<typeof useSheet>>, { kind: 'prompt' }>) {
   const [text, setText] = useState(initialValue ?? '');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -411,6 +420,9 @@ function PromptSheet({ title, placeholder, initialValue, confirmLabel, onSubmit 
       <Text className="text-foreground text-lg font-bold px-5 pb-3">{title}</Text>
       <TextInput
         autoFocus
+        keyboardType={numeric ? 'number-pad' : undefined}
+        secureTextEntry={secure}
+        maxLength={maxLength}
         value={text}
         onChangeText={setText}
         placeholder={placeholder}

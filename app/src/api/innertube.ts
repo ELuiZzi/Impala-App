@@ -56,10 +56,11 @@ export function setAudioClient(client: InnertubeClient | null) {
 
 export class YoutubeError extends Error {}
 
-type CallOptions = { host: 'music' | 'www'; client: InnertubeClient; visitorData?: string | null; signal?: AbortSignal };
+/** hl: idioma de los textos de la respuesta (por defecto inglés, que es lo que leen los parsers de búsqueda). */
+type CallOptions = { host: 'music' | 'www'; client: InnertubeClient; visitorData?: string | null; signal?: AbortSignal; hl?: string };
 
 /** POST a un endpoint de InnerTube; un timeout evita esperar para siempre antes de probar el servidor. */
-export async function call(endpoint: string, body: object, { host, client, visitorData, signal }: CallOptions): Promise<any> {
+export async function call(endpoint: string, body: object, { host, client, visitorData, signal, hl = 'en' }: CallOptions): Promise<any> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
   const abort = () => controller.abort();
@@ -78,7 +79,7 @@ export async function call(endpoint: string, body: object, { host, client, visit
       },
       body: JSON.stringify({
         context: {
-          client: { clientName: client.name, clientVersion: client.version, hl: 'en', ...client.context, ...(visitorData ? { visitorData } : {}) },
+          client: { clientName: client.name, clientVersion: client.version, ...client.context, hl, ...(visitorData ? { visitorData } : {}) },
           user: {},
         },
         ...body,
@@ -96,8 +97,8 @@ export async function call(endpoint: string, body: object, { host, client, visit
 }
 
 /** YouTube Music (WEB_REMIX). */
-export const music = (endpoint: string, body: object, signal?: AbortSignal) =>
-  call(endpoint, body, { host: 'music', client: webRemix(), visitorData: visitor, signal });
+export const music = (endpoint: string, body: object, signal?: AbortSignal, hl?: string) =>
+  call(endpoint, body, { host: 'music', client: webRemix(), visitorData: visitor, signal, hl });
 
 /** YouTube (WEB). */
 export const youtube = (endpoint: string, body: object, signal?: AbortSignal) =>

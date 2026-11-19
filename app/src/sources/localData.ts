@@ -18,11 +18,15 @@ type LocalData = {
   favorites: Record<string, string>;
   /** Escuchas completas, para «Recientes» y «Más escuchadas». */
   plays: Record<string, { count: number; last: string }>;
+  /** Donde se guardan las descargas de YouTube (mismo formato que `folders`). */
+  downloadFolder: string;
+  /** Android: volumen de esa carpeta (tarjeta SD…); null = memoria interna. */
+  downloadVolume: string | null;
 };
 
 /** En el PC la música suele estar en toda la carpeta Música (Music/Impala, la de las descargas, queda dentro). */
 export const DEFAULT_FOLDER = Platform.OS === 'web' ? 'Music/' : 'Music/Impala/';
-/** Donde se guardan las descargas de YouTube (en el PC, dentro de Música pero en su propia carpeta). */
+/** Carpeta de descargas por defecto (en el PC, dentro de Música pero en su propia carpeta); se cambia en Ajustes. */
 export const DOWNLOAD_FOLDER = 'Music/Impala/';
 
 const FILE = new File(Paths.document, 'local-library.json');
@@ -33,7 +37,7 @@ const isStringArray = (v: unknown): v is string[] => Array.isArray(v) && v.every
 
 export function localData(): LocalData {
   if (data) return data;
-  data = { folders: [DEFAULT_FOLDER], playlists: [], favorites: {}, plays: {} };
+  data = { folders: [DEFAULT_FOLDER], playlists: [], favorites: {}, plays: {}, downloadFolder: DOWNLOAD_FOLDER, downloadVolume: null };
   try {
     if (FILE.exists) {
       const parsed = JSON.parse(FILE.textSync()) as Partial<LocalData> | null;
@@ -46,6 +50,8 @@ export function localData(): LocalData {
         }
         if (parsed.favorites && typeof parsed.favorites === 'object') data.favorites = parsed.favorites;
         if (parsed.plays && typeof parsed.plays === 'object') data.plays = parsed.plays;
+        if (typeof parsed.downloadFolder === 'string' && parsed.downloadFolder) data.downloadFolder = parsed.downloadFolder;
+        if (typeof parsed.downloadVolume === 'string' && parsed.downloadVolume) data.downloadVolume = parsed.downloadVolume;
       }
     }
   } catch {
@@ -75,6 +81,25 @@ export function useLocalFolders(): string[] {
     },
     () => localData().folders,
   );
+}
+
+/** Carpeta y volumen de las descargas (cambian desde Ajustes). */
+export function useDownloadTarget(): { folder: string; volume: string | null } {
+  const folder = useSyncExternalStore(
+    (l) => {
+      listeners.add(l);
+      return () => void listeners.delete(l);
+    },
+    () => localData().downloadFolder,
+  );
+  const volume = useSyncExternalStore(
+    (l) => {
+      listeners.add(l);
+      return () => void listeners.delete(l);
+    },
+    () => localData().downloadVolume,
+  );
+  return { folder, volume };
 }
 
 export const newPlaylistId = () => `pl-${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;

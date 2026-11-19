@@ -43,7 +43,7 @@ export type ErrorEvent = { code: string; message: string };
 
 /** Vista previa de YouTube: 'stopped' llega al detenerla a mano; 'ended' y 'error' la liberan solas. */
 export type PreviewEvent = {
-  state: 'loading' | 'playing' | 'ended' | 'error' | 'stopped';
+  state: 'loading' | 'playing' | 'paused' | 'ended' | 'error' | 'stopped';
   positionMs?: number;
   durationMs?: number | null;
   /** Vista previa por tramos (startPreviewClips): el tramo que suena; positionMs es dentro de él. */
@@ -134,10 +134,13 @@ declare class ImpalaPlayerModule extends NativeModule<Events> {
   setGymSettings(maxPercent: number, minutes: number): void;
   /** Hasta 5 colores (#rrggbb) de una carátula, los más vistosos primero; [] si no se pudo leer. */
   getArtworkColors(url: string): Promise<string[]>;
-  /** Reproductor aparte para escuchar un audio sin tocar la cola (vista previa de YouTube). */
-  startPreview(url: string): Promise<void>;
+  /** Reproductor aparte para escuchar un audio sin tocar la cola (vista previa de YouTube), desde `positionMs`. */
+  startPreview(url: string, positionMs: number): Promise<void>;
   /** Vista previa de un recorte: solo los tramos [inicio, fin] (ms), seguidos, desde el tramo `index` en `positionMs`. */
   startPreviewClips(url: string, clips: [number, number][], index: number, positionMs: number): Promise<void>;
+  /** Pausa (false) o reanuda (true) la vista previa sin soltarla. */
+  setPreviewPlaying(playing: boolean): Promise<void>;
+  seekPreview(positionMs: number): Promise<void>;
   stopPreview(): Promise<void>;
   getState(): Promise<StateEvent>;
   getQueue(): Promise<Omit<NativeTrack, 'url'>[]>;

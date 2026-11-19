@@ -394,11 +394,11 @@ pub fn library_music_folder() -> String {
     dirs::audio_dir().map(|d| folder_label(&d)).unwrap_or_else(|| "Music/".into())
 }
 
-/// Elegir otra carpeta con el selector de Windows. None si se cancela.
+/// Elegir otra carpeta con el selector de Windows (`title`: el de la ventana). None si se cancela.
 #[tauri::command]
-pub async fn library_pick_folder(app: AppHandle) -> Option<String> {
+pub async fn library_pick_folder(app: AppHandle, title: Option<String>) -> Option<String> {
     use tauri_plugin_dialog::DialogExt;
-    let dialog = app.dialog().file().set_title("Elegir carpeta con música");
+    let dialog = app.dialog().file().set_title(title.as_deref().unwrap_or("Elegir carpeta con música"));
     let picked = tauri::async_runtime::spawn_blocking(move || dialog.blocking_pick_folder()).await.ok().flatten()?;
     picked.into_path().ok().map(|p| folder_label(&p))
 }

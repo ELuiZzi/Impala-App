@@ -10,6 +10,8 @@ import { useArtist, useArtistSongs, useLibraryArtistByName } from '@/api/queries
 import { fold, useYoutubeArtist, useYoutubeDownloads, type YoutubeAlbum, type YoutubeJob, type YoutubeResult } from '@/api/youtube';
 import { downloadSongs } from '@/offline/store';
 import { stopPreview } from '@/player/preview';
+import { artistSubscription, openSubscription, subscribeToArtist } from '@/subscriptions/actions';
+import { PREVIEW_BAR_HEIGHT, usePreviewBarVisible } from '@/components/player/PreviewBar';
 import { playSongs } from '@/player/store';
 import { useSource, type Song } from '@/sources';
 import { AlbumTile as LibraryAlbumTile, SongRow } from './rows';
@@ -45,6 +47,7 @@ type Popular = { kind: 'library'; song: Song; result: YoutubeResult } | { kind: 
 export function ArtistPage({ libraryId, youtubeId, name: knownName }: Props) {
   const source = useSource();
   const insets = useSafeAreaInsets();
+  const previewing = usePreviewBarVisible();
   const { width } = useWindowDimensions();
   const accent = useThemeColor('accent');
   const background = useThemeColor('background');
@@ -149,6 +152,23 @@ export function ArtistPage({ libraryId, youtubeId, name: knownName }: Props) {
         },
       });
     }
+    // Seguir su canal de YouTube: sus videos nuevos llegan a Suscripciones.
+    const channelId = youtube.data?.id;
+    if (youtubeOn && title) {
+      const followed = artistSubscription(channelId, artistName(title));
+      options.push(
+        followed
+          ? { label: 'Ver su canal en Suscripciones', icon: 'radio', onPress: () => (closeSheet(), openSubscription(followed)) }
+          : {
+              label: 'Suscribirse a su canal',
+              icon: 'radio-outline',
+              onPress: async () => {
+                closeSheet();
+                await subscribeToArtist(artistName(title), channelId);
+              },
+            },
+      );
+    }
     if (options.length === 0) return;
     showSheet({ kind: 'actions', title: artistName(title), subtitle: 'Artista', coverArt: library.data?.coverArt, thumbnail: image, options });
   };
@@ -156,7 +176,7 @@ export function ArtistPage({ libraryId, youtubeId, name: knownName }: Props) {
   const visible = showAll ? populars : populars.slice(0, TOP_PREVIEW);
 
   return (
-    <ScrollView className="flex-1 bg-background" contentContainerStyle={{ paddingBottom: insets.bottom + 32 }}>
+    <ScrollView className="flex-1 bg-background" contentContainerStyle={{ paddingBottom: insets.bottom + 32 + (previewing ? PREVIEW_BAR_HEIGHT : 0) }}>
       {/* Foto grande con el nombre encima, fundida con el fondo. */}
       <View style={{ height: heroHeight }} className="bg-card">
         {image && <StyledImage source={{ uri: image }} contentFit="cover" cachePolicy="disk" transition={250} className="absolute inset-0" />}

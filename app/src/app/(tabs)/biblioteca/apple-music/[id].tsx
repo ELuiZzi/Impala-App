@@ -306,7 +306,13 @@ function TrackRow({ track, reviewing, skipped, onToggle }: { track: ImportTrack;
     : track.state === 'failed' ? (track.error ?? 'No se pudo descargar')
     : track.artist;
 
-  const listen = () => youtube && togglePreview(youtube.videoId, youtubePreviewSource(session, youtube.videoId), mainPlaying);
+  const listen = () =>
+    youtube &&
+    togglePreview(youtube.videoId, youtubePreviewSource(session, youtube.videoId), mainPlaying, {
+      title: track.title,
+      subtitle: track.artist,
+      thumbnail: track.artwork ?? undefined,
+    });
 
   return (
     <Pressable onPress={listen} disabled={!youtube} className="flex-row items-center px-5 active:bg-card">
@@ -315,7 +321,7 @@ function TrackRow({ track, reviewing, skipped, onToggle }: { track: ImportTrack;
         {track.artwork && <StyledImage source={{ uri: track.artwork }} contentFit="cover" cachePolicy="disk" className="absolute inset-0" />}
         {preview && (
           <View className="absolute inset-0 items-center justify-center bg-black/50">
-            {preview === 'loading' ? <ActivityIndicator size="small" color="white" /> : preview === 'playing' ? <Ionicons name="stop" size={18} color="white" /> : null}
+            {preview === 'loading' ? <ActivityIndicator size="small" color="white" /> : preview === 'playing' ? <Ionicons name="stop" size={18} color="white" /> : preview === 'paused' ? <Ionicons name="play" size={18} color="white" /> : null}
           </View>
         )}
       </View>

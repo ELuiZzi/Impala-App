@@ -1,10 +1,10 @@
 import { Channel } from '@tauri-apps/api/core';
 import { noteWrittenFile } from '../../src/platform/web/file-system';
 import { invoke, isTauri } from '../../src/platform/web/tauri';
-import type { AudioProbe, DeviceFolder, DeviceSong, DownloadEvent, YoutubeDownloadOptions } from './index';
+import type { AudioProbe, DeviceFolder, DeviceSong, DownloadEvent, StorageVolume, YoutubeDownloadOptions } from './index';
 
 // Con nombre y no `export type *` (ver impala-player/index.web.ts).
-export type { AudioProbe, DeviceFolder, DeviceSong, DownloadEvent, YoutubeDownloadOptions } from './index';
+export type { AudioProbe, DeviceFolder, DeviceSong, DownloadEvent, StorageVolume, YoutubeDownloadOptions } from './index';
 
 /**
  * La música del equipo en la app de PC, con la misma API que el módulo de Android (índice de MediaStore): la lee
@@ -36,6 +36,8 @@ const ImpalaLibrary = {
   getSongs: async (folders: string[]): Promise<DeviceSong[]> => (isTauri() ? invoke<DeviceSong[]>('library_songs', { folders }) : []),
   /** Las carpetas con audio dentro de Música y de las ya elegidas. */
   getFolders: async (extra: string[] = []): Promise<DeviceFolder[]> => (isTauri() ? invoke<DeviceFolder[]>('library_folders', { extra }) : []),
+  /** En el PC no hay volúmenes que elegir: la carpeta de descargas se elige con el selector de Windows. */
+  getStorageVolumes: async (): Promise<StorageVolume[]> => [],
   /** Síncrona como en Android: se crea por detrás. */
   ensureFolder: (relativePath: string) => {
     if (isTauri()) void invoke('library_ensure_folder', { folder: relativePath }).catch(() => {});
@@ -72,7 +74,7 @@ const ImpalaLibrary = {
   overwriteSong: (id: string, input: string): Promise<boolean> => invoke<boolean>('media_overwrite', { id, input }),
 
   /** Solo en PC: elegir otra carpeta con el selector de Windows (formato de las carpetas elegidas). */
-  pickFolder: (): Promise<string | null> => invoke<string | null>('library_pick_folder'),
+  pickFolder: (title?: string): Promise<string | null> => invoke<string | null>('library_pick_folder', { title: title ?? null }),
 };
 
 export default ImpalaLibrary;

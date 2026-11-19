@@ -254,7 +254,8 @@ export default function ReproduciendoScreen() {
         )}
       </View>
 
-      <Scrubber positionMs={positionMs} bufferedMs={bufferedMs} durationMs={durationMs || null} onSeek={seekTo} />
+      {/* En el PC la barra de reproducción de abajo ya tiene el progreso y los controles: aquí no se repiten. */}
+      {!desktop && <Scrubber positionMs={positionMs} bufferedMs={bufferedMs} durationMs={durationMs || null} onSeek={seekTo} />}
 
       <View className="h-6 mt-1 flex-row items-center justify-center gap-1.5">
         {error ? (
@@ -269,7 +270,16 @@ export default function ReproduciendoScreen() {
 
       {/* Aleatorio y repetición justo encima de los controles; resaltados cuando están activos. Para cerrar se desliza hacia abajo.
           Con gestos no hay ninguno de los dos: se maneja tocando y deslizando la carátula. */}
-      {gestureMode && !episode ? <View className="h-4" /> : (<>
+      {desktop ? (
+        episode ? (
+          <View className="flex-row items-center justify-center gap-16 mt-3 mb-6">
+            <JumpButton seconds={-15} onPress={() => jump(-15_000)} />
+            <JumpButton seconds={30} onPress={() => jump(30_000)} />
+          </View>
+        ) : (
+          <View className="h-4" />
+        )
+      ) : gestureMode && !episode ? <View className="h-4" /> : (<>
       {!episode && <View className="flex-row items-center justify-between mt-3">
         <ModeButton icon="shuffle" active={shuffle} onPress={toggleShuffle} label={shuffle ? 'Desactivar aleatorio' : 'Activar aleatorio'} />
         <ModeButton
@@ -332,8 +342,8 @@ export default function ReproduciendoScreen() {
   // PC: carátula y controles a la izquierda, letra a la derecha; con ratón se cierra con el botón (o Escape).
   if (desktop && !lyricsFullscreen) {
     const column = Math.min(480, Math.max(320, width * 0.36));
-    // Lo que queda de alto tras la barra de reproducción, los márgenes y los controles (~400 px).
-    const desktopArt = Math.max(120, Math.min(column, height - PLAYER_BAR_HEIGHT - 480));
+    // Lo que queda de alto tras la barra de reproducción, los márgenes, el título y los botones (~200 px).
+    const desktopArt = Math.max(120, Math.min(column, height - PLAYER_BAR_HEIGHT - 280));
     return (
       <View className="flex-1 bg-black overflow-hidden">
         <StatusBar style="light" />

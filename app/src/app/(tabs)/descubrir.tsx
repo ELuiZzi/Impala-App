@@ -156,11 +156,11 @@ export default function DiscoverScreen() {
           {/* En pantallas anchas (PC) los botones no se reparten por todo el ancho. */}
           <View style={{ maxWidth: 560, width: '100%', alignSelf: 'center' }} className="px-8 pb-4">
             <ClipProgress videoId={track.videoId} full={full} />
-            <View className="flex-row items-center justify-between mt-4">
+            {/* Sin botón «Siguiente»: se pasa deslizando (o con la rueda / ↓ en el PC). */}
+            <View className="flex-row items-center justify-around mt-4">
               <RoundAction icon={liked ? 'star' : 'star-outline'} label={liked ? 'Te gusta' : 'Me gusta'} color={liked ? '#FFD60A' : 'white'} onPress={like} />
               <RoundAction icon="add" label="Playlist" onPress={addToPlaylist} />
               <RoundAction icon={full ? 'infinite' : 'timer-outline'} label="Entera" active={full} onPress={listenWhole} />
-              <RoundAction icon="play-skip-forward" label="Siguiente" onPress={() => void next()} />
             </View>
             {index === 0 && (
               <Text className="text-white/50 text-xs text-center mt-3">

@@ -1,6 +1,6 @@
 import { File, Paths } from 'expo-file-system';
 import { useSyncExternalStore } from 'react';
-import { type Episode, type FeedKind, FeedError, mergeEpisodes, parseFeed } from './feeds';
+import { type Episode, type FeedKind, FeedError, longVideosFeedUrl, mergeEpisodes, parseFeed, parseYoutubeFeed } from './feeds';
 import { isTopicChannel, resolveSource } from './resolve';
 
 /** Hasta dónde se escuchó un episodio. */
@@ -79,7 +79,9 @@ function load(): Subscription[] {
   list = [];
   try {
     if (FILE.exists) {
-      const parsed = JSON.parse(FILE.textSync()) as { subscriptions?: unknown; episodeSpeed?: unknown; wifiOnly?: unknown } | null;
+      const parsed = JSON.parse(FILE.textSync()) as { version?: unknown; subscriptions?: unknown; episodeSpeed?: unknown; wifiOnly?: unknown } | null;
+      // Hasta la versión 2 los Shorts se veían por defecto; desde entonces se ocultan (también en lo ya guardado).
+      const shortsHiddenByDefault = typeof parsed?.version !== 'number' || parsed.version < 2;
       if (typeof parsed?.episodeSpeed === 'number' && EPISODE_SPEEDS.includes(parsed.episodeSpeed)) speed = parsed.episodeSpeed;
       if (typeof parsed?.wifiOnly === 'boolean') wifiOnly = parsed.wifiOnly;
       if (Array.isArray(parsed?.subscriptions)) {
@@ -88,7 +90,7 @@ function load(): Subscription[] {
           .map((s) => ({
             ...s,
             lastOpened: s.lastOpened ?? s.added ?? null,
-            hideShorts: !!s.hideShorts,
+            hideShorts: shortsHiddenByDefault ? true : !!s.hideShorts,
             progress: s.progress ?? {},
             autoDownload: typeof s.autoDownload === 'number' ? s.autoDownload : DEFAULT_AUTO_DOWNLOAD,
             notify: s.notify ?? true,
@@ -106,7 +108,7 @@ function save(next: Subscription[]) {
   list = next;
   listeners.forEach((l) => l());
   try {
-    FILE.write(JSON.stringify({ version: 1, episodeSpeed: speed, wifiOnly, subscriptions: next }));
+    FILE.write(JSON.stringify({ version: 2, episodeSpeed: speed, wifiOnly, subscriptions: next }));
   } catch (e) {
     console.warn('No se pudieron guardar las suscripciones', e);
   }
@@ -132,6 +134,16 @@ export function useSubscriptions(): Subscription[] {
 type FetchResult = { notModified: true } | { notModified: false; xml: string; etag: string | null; lastModified: string | null };
 
 /** Pide el feed; con etag/lastModified, el servidor puede contestar 304 (no ha cambiado) sin mandarlo entero. */
+/** Los últimos 15 videos largos de un canal (sin Shorts ni directos); si falla, ninguno. */
+async function longVideos(channelId: string): Promise<Episode[]> {
+  try {
+    const res = await fetchFeed(longVideosFeedUrl(channelId), null, null);
+    return res.notModified ? [] : parseYoutubeFeed(res.xml, KEEP).episodes;
+  } catch {
+    return [];
+  }
+}
+
 async function fetchFeed(url: string, etag: string | null, lastModified: string | null): Promise<FetchResult> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
@@ -175,6 +187,10 @@ export async function addSubscription(input: string): Promise<Subscription> {
     throw new FeedError('Ese es un canal automático de YouTube Music, sin videos: busca el canal oficial del artista');
   }
 
+  // Canales: también los últimos videos largos (el feed normal son solo las 15 publicaciones más nuevas, a menudo
+  // casi todas Shorts).
+  const episodes = source.kind === 'youtube' ? mergeEpisodes([], [...feed.episodes, ...(await longVideos(source.channelId))], KEEP) : feed.episodes;
+
   const now = new Date().toISOString();
   const sub: Subscription = {
     id,
@@ -191,10 +207,10 @@ export async function addSubscription(input: string): Promise<Subscription> {
     etag: res.etag,
     lastModified: res.lastModified,
     error: null,
-    episodes: feed.episodes,
+    episodes,
     // Lo que ya había al suscribirse no cuenta como nuevo.
     lastOpened: now,
-    hideShorts: false,
+    hideShorts: true,
     progress: {},
     autoDownload: DEFAULT_AUTO_DOWNLOAD,
     notify: true,
@@ -296,26 +312,30 @@ export async function refreshSubscription(id: string, { force = false } = {}): P
   if (!force && !sub.error && sub.checked && Date.now() - Date.parse(sub.checked) < MIN_INTERVAL_MS) return [];
   const checked = new Date().toISOString();
   try {
-    const res = await fetchFeed(sub.feedUrl, sub.etag, sub.lastModified);
-    if (res.notModified) {
+    const [res, long] = await Promise.all([
+      fetchFeed(sub.feedUrl, sub.etag, sub.lastModified),
+      sub.kind === 'youtube' && sub.channelId ? longVideos(sub.channelId) : Promise.resolve([] as Episode[]),
+    ]);
+    const feed = res.notModified ? null : parseFeed(res.xml, KEEP);
+    const fresh = [...(feed?.episodes ?? []), ...long];
+    const known = new Set(sub.episodes.map((e) => e.id));
+    const added = [...new Set(fresh.filter((e) => !known.has(e.id)).map((e) => e.id))];
+    if (!feed && !added.length) {
       patch(id, { checked, error: null });
       return [];
     }
-    const feed = parseFeed(res.xml, KEEP);
-    const known = new Set(sub.episodes.map((e) => e.id));
-    const added = feed.episodes.filter((e) => !known.has(e.id)).map((e) => e.id);
     // El que hubiera en el archivo ahora (otra actualización pudo terminar antes).
     const current = subscription(id);
     if (!current) return [];
     patch(id, {
       checked,
       error: null,
-      etag: res.etag,
-      lastModified: res.lastModified,
-      title: current.kind === 'youtube' ? current.title : feed.title || current.title,
-      author: feed.author ?? current.author,
-      image: current.kind === 'youtube' ? current.image : (feed.image ?? current.image),
-      episodes: mergeEpisodes(current.episodes, feed.episodes, KEEP),
+      etag: res.notModified ? current.etag : res.etag,
+      lastModified: res.notModified ? current.lastModified : res.lastModified,
+      title: current.kind === 'youtube' || !feed ? current.title : feed.title || current.title,
+      author: feed?.author ?? current.author,
+      image: current.kind === 'youtube' || !feed ? current.image : (feed.image ?? current.image),
+      episodes: mergeEpisodes(current.episodes, fresh, KEEP),
     });
     return added;
   } catch (e) {

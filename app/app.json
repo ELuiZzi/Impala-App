@@ -3,7 +3,7 @@
     "name": "Impala",
     "slug": "impala",
     "scheme": "impala",
-    "version": "1.7.0",
+    "version": "1.7.1",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "automatic",
@@ -16,7 +16,7 @@
         "monochromeImage": "./assets/android-icon-monochrome.png"
       },
       "predictiveBackGestureEnabled": false,
-      "versionCode": 12
+      "versionCode": 13
     },
     "plugins": [
       "expo-router",

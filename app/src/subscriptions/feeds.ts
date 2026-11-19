@@ -308,6 +308,9 @@ export function classifyInput(raw: string): SourceInput {
 
 export const youtubeFeedUrl = (channelId: string) => `https://www.youtube.com/feeds/videos.xml?channel_id=${channelId}`;
 
+/** Solo los videos largos de un canal (lista «UULF…»: sin Shorts ni directos). */
+export const longVideosFeedUrl = (channelId: string) => `https://www.youtube.com/feeds/videos.xml?playlist_id=UULF${channelId.replace(/^UC/, '')}`;
+
 /**
  * Une los episodios guardados con los recién leídos: los del feed mandan (títulos o imágenes corregidos), los
  * viejos que ya no salen en el feed se conservan (el de YouTube solo trae los últimos 15). Más nuevos primero,

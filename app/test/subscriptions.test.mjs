@@ -200,3 +200,8 @@ test('mezclar episodios: los nuevos mandan y los viejos se conservan', () => {
   assert.equal(merged[1].title, 'b corregido');
   assert.deepEqual(mergeEpisodes(saved, fresh, 2).map((e) => e.id), ['c', 'b']);
 });
+
+test('feed de videos largos de un canal (UULF…)', async () => {
+  const { longVideosFeedUrl } = await import('../src/subscriptions/feeds.ts');
+  assert.equal(longVideosFeedUrl('UC83J3suUsNnOacIkqOyKvhw'), 'https://www.youtube.com/feeds/videos.xml?playlist_id=UULF83J3suUsNnOacIkqOyKvhw');
+});

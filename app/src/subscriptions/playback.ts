@@ -1,6 +1,7 @@
 import { youtubePreviewSource } from '@/api/youtube';
 import type { Session } from '@/api/subsonic';
 import { currentSong, isEpisodeId, playerState, playSongs, subscribePlayer } from '@/player/store';
+import { isTauri } from '@/platform/web/tauri';
 import ImpalaPlayer from '../../modules/impala-player';
 import { downloadedUri, syncDownloads } from './downloads';
 import type { Episode } from './feeds';
@@ -60,8 +61,15 @@ export function resumePosition(sub: Subscription, episode: Episode): number {
   return p && !p.done ? Math.max(0, p.positionMs - RESUME_REWIND_MS) : 0;
 }
 
+/**
+ * En el PC el motor de audio usa Web Audio, que solo lee audio de otros sitios con CORS; YouTube y casi todos los
+ * podcasts no lo dan (sonaba «formato no compatible»). Pasa por la app (files.rs, ruta /remote), que lo pide desde Rust.
+ */
+const playable = (url: string) =>
+  isTauri() && /^https?:\/\//.test(url) && !url.startsWith('http://impala.localhost') ? `http://impala.localhost/remote?u=${encodeURIComponent(url)}` : url;
+
 async function start(sub: Subscription, episode: Episode, positionMs: number, attempt: number) {
-  const url = await audioUrl(sub, episode, attempt);
+  const url = playable(await audioUrl(sub, episode, attempt));
   const id = episodeTrackId(sub.id, episode.id);
   // Velocidad propia de los episodios, sin cambiar el tono ni la reverb (el «sped up» de la música no se aplica).
   ImpalaPlayer.setPlaybackTuning(id, episodeSpeed(), 0, false, 0);

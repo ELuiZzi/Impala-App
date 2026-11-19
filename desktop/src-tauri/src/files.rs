@@ -70,6 +70,14 @@ pub fn protocol(ctx: UriSchemeContext<'_, tauri::Wry>, request: Request<Vec<u8>>
                     .unwrap(),
                 None => error(StatusCode::NOT_FOUND, "sin carátula"),
             }
+        } else if path == "/remote" {
+            // Audio de otro sitio (episodios de YouTube y podcasts): el motor de audio usa Web Audio, que exige CORS,
+            // y esos servidores no lo dan («formato no compatible»). Se pide desde Rust y se entrega con CORS.
+            let url = request.uri().query().and_then(|q| q.strip_prefix("u=")).map(percent_decode);
+            match url {
+                Some(u) if u.starts_with("https://") || u.starts_with("http://") => remote(&u, range),
+                _ => error(StatusCode::BAD_REQUEST, "falta la dirección"),
+            }
         } else {
             match resolve(&app, &format!("http://impala.localhost{path}")) {
                 Ok(p) => serve(&p, range),
@@ -104,6 +112,57 @@ fn error(status: StatusCode, message: &str) -> Response<Vec<u8>> {
         .header(header::ACCESS_CONTROL_ALLOW_ORIGIN, "*")
         .body(message.as_bytes().to_vec())
         .unwrap()
+}
+
+/** Trozo que se pide de un audio remoto cuando el reproductor pide «desde aquí hasta el final». */
+const REMOTE_CHUNK: u64 = 1024 * 1024;
+
+fn remote_client() -> &'static reqwest::Client {
+    static CLIENT: std::sync::OnceLock<reqwest::Client> = std::sync::OnceLock::new();
+    // Uno solo para todo: reutiliza la conexión entre trozos (cada uno sería, si no, otro TLS).
+    CLIENT.get_or_init(|| reqwest::Client::builder().user_agent("Mozilla/5.0 Impala").build().expect("cliente http"))
+}
+
+/**
+ * Un tramo de un audio remoto. Un rango abierto («bytes=N-») se convierte en uno de REMOTE_CHUNK: el reproductor pide
+ * el siguiente al llegar al final, y así ni se espera a descargar un episodio de 100 MB ni se guarda entero en memoria.
+ */
+fn remote(url: &str, range: Option<&str>) -> Response<Vec<u8>> {
+    let (start, end) = range
+        .and_then(|r| r.strip_prefix("bytes="))
+        .and_then(|r| {
+            let (a, b) = r.split_once('-')?;
+            Some((a.trim().parse::<u64>().ok()?, b.trim().parse::<u64>().ok()))
+        })
+        .unwrap_or((0, None));
+    let end = end.unwrap_or(start + REMOTE_CHUNK - 1).min(start + REMOTE_CHUNK * 4 - 1);
+    let result = tauri::async_runtime::block_on(async {
+        let res = remote_client()
+            .get(url)
+            .header(header::RANGE.as_str(), format!("bytes={start}-{end}"))
+            .send()
+            .await
+            .map_err(|e| e.to_string())?;
+        let status = res.status().as_u16();
+        let content_type = res.headers().get("content-type").and_then(|v| v.to_str().ok()).unwrap_or("audio/mpeg").to_string();
+        let content_range = res.headers().get("content-range").and_then(|v| v.to_str().ok()).map(str::to_string);
+        let body = res.bytes().await.map_err(|e| e.to_string())?.to_vec();
+        Ok::<_, String>((status, content_type, content_range, body))
+    });
+    match result {
+        Ok((status, content_type, content_range, body)) => {
+            let mut builder = Response::builder()
+                .status(status)
+                .header(header::ACCESS_CONTROL_ALLOW_ORIGIN, "*")
+                .header(header::ACCEPT_RANGES, "bytes")
+                .header(header::CONTENT_TYPE, content_type);
+            if let Some(cr) = content_range {
+                builder = builder.header(header::CONTENT_RANGE, cr);
+            }
+            builder.body(body).unwrap()
+        }
+        Err(e) => error(StatusCode::BAD_GATEWAY, &e),
+    }
 }
 
 fn serve(path: &Path, range: Option<&str>) -> Response<Vec<u8>> {
